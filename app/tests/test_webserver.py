@@ -68,6 +68,32 @@ def test_read_recent_records_paginates(monkeypatch, tmp_path):
     ]
 
 
+def test_read_records_for_day_ignores_invalid_and_other_days(monkeypatch, tmp_path):
+    log_file = tmp_path / "connectivity.log"
+    log_file.write_text(
+        "\n".join(
+            [
+                "",
+                "not-json",
+                json.dumps({"timestamp": "2024-06-02T01:00:00Z", "loss_pct": 0}),
+                json.dumps({"timestamp": "2024-06-01T23:59:00Z", "loss_pct": 50}),
+                "{bad",
+                json.dumps({"timestamp": "2024-06-02T02:00:00Z", "loss_pct": 10}),
+            ]
+        )
+    )
+
+    monkeypatch.setattr(webserver, "LOG_FILE", str(log_file))
+
+    records = webserver.read_records_for_day("2024-06-02")
+
+    assert [r["timestamp"] for r in records] == [
+        "2024-06-02T01:00:00Z",
+        "2024-06-02T02:00:00Z",
+    ]
+    assert all(r.get("loss_pct") is not None for r in records)
+
+
 def test_js_csv_export_formatting():
     try:
         from py_mini_racer import py_mini_racer
