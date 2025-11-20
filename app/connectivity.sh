@@ -84,6 +84,20 @@ evaluate_mtr_state
 mkdir -p "$LOG_ROOT"
 touch "$LOG_FILE"
 
+strip_cr() {
+  printf '%s' "$1" | tr -d '\r'
+}
+
+trim_ws() {
+  local val
+  val="$(strip_cr "$1")"
+  # Trim leading whitespace
+  val="${val#${val%%[![:space:]]*}}"
+  # Trim trailing whitespace
+  val="${val%${val##*[![:space:]]}}"
+  printf '%s' "$val"
+}
+
 rotate_logs() {
   if [ ! -f "$LOG_FILE" ]; then
     return
@@ -128,7 +142,11 @@ while true; do
 
   if [ -f "$CONFIG_FILE" ]; then
     while IFS='=' read -r key value; do
+      key="$(trim_ws "$key")"
+      value="$(trim_ws "$value")"
+
       case "$key" in
+        ''|\#*) continue ;;
         TARGETS) TARGETS_ENV="$value" ;;
         INTERVAL_SECONDS) INTERVAL="$value" ;;
         ENABLE_MTR) MTR_ENABLED_RAW="$value" ;;
