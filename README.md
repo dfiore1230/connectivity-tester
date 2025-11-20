@@ -61,9 +61,9 @@ Dashboard will be available at:
 > those values into `/logs/config.env` so the probe loop and UI stay aligned.
 > Update the compose file to change behavior, then restart the stack.
 
-### Optional hop insight via mtr
+### Hop insight via mtr (enabled by default)
 
-If you want hop-by-hop visibility, enable `mtr` in the probe container. Docker Compose example (adds the needed raw-socket capability):
+`mtr` now defaults to **on** for richer path data. Ensure the container has raw-socket capability so it can run successfully. Docker Compose example (adds the needed raw-socket capability):
 
 ```yaml
 services:
