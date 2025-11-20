@@ -16,6 +16,14 @@ def copy_fixture(tmp_path, filename):
     return dst
 
 
+def test_resolve_enable_mtr_defaults_to_current():
+    assert webserver._resolve_enable_mtr(None, "1") is True
+    assert webserver._resolve_enable_mtr(None, "on") is True
+    assert webserver._resolve_enable_mtr(None, "0") is False
+    assert webserver._resolve_enable_mtr(True, "0") is True
+    assert webserver._resolve_enable_mtr("false", "1") is False
+
+
 def test_build_daily_summary_from_file(monkeypatch, tmp_path):
     log_path = copy_fixture(tmp_path, "sample_connectivity.log")
     monkeypatch.setattr(webserver, "LOG_FILE", str(log_path))
