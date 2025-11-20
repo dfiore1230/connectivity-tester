@@ -261,6 +261,7 @@ while true; do
     MTR_LAST_HOP=""
     MTR_LAST_LOSS="null"
     MTR_LAST_AVG="null"
+    MTR_REPORT_JSON="[]"
 
     if [ "$MTR_AVAILABLE" -eq 1 ]; then
       MTR_OUTPUT=""
@@ -278,22 +279,21 @@ while true; do
       fi
 
       if [ -n "$MTR_OUTPUT" ]; then
-        # Count hops and track the last visible hop's metrics
-        # Format reference: hop.|-- host loss% snt last avg best wrst stdev
-        MTR_STATS=$(echo "$MTR_OUTPUT" | awk 'NR>2 && $2!~/^-/ {
+        # Parse report lines (skip headers) and emit hop data with loss/latency metrics
+        MTR_PARSED_LINES=$(echo "$MTR_OUTPUT" | awk 'NR>2 && $2!~/^-/ {
           hop=$1; gsub("[^0-9]", "", hop);
           host=$2;
           loss=$3; gsub("%", "", loss);
-          avg=$(NF-3);
-          printf("%s %s %s %s\n", hop, host, loss, avg);
+          sent=$4; last=$5; avg=$6; best=$7; wrst=$8; stdev=$9;
+          printf("%s|%s|%s|%s|%s|%s|%s|%s|%s\n", hop, host, loss, sent, last, avg, best, wrst, stdev);
         }')
 
-        if [ -n "$MTR_STATS" ]; then
-          MTR_HOPS=$(echo "$MTR_STATS" | wc -l | tr -d ' ')
-          MTR_LAST_LINE=$(echo "$MTR_STATS" | tail -n 1)
-          MTR_LAST_HOP=$(echo "$MTR_LAST_LINE" | awk '{print $2}')
-          MTR_LAST_LOSS_RAW=$(echo "$MTR_LAST_LINE" | awk '{print $3}')
-          MTR_LAST_AVG_RAW=$(echo "$MTR_LAST_LINE" | awk '{print $4}')
+        if [ -n "$MTR_PARSED_LINES" ]; then
+          MTR_HOPS=$(printf "%s\n" "$MTR_PARSED_LINES" | wc -l | tr -d ' ')
+          MTR_LAST_LINE=$(printf "%s\n" "$MTR_PARSED_LINES" | tail -n 1)
+          MTR_LAST_HOP=$(printf "%s" "$MTR_LAST_LINE" | cut -d'|' -f2)
+          MTR_LAST_LOSS_RAW=$(printf "%s" "$MTR_LAST_LINE" | cut -d'|' -f3)
+          MTR_LAST_AVG_RAW=$(printf "%s" "$MTR_LAST_LINE" | cut -d'|' -f6)
 
           if [ -n "$MTR_LAST_LOSS_RAW" ]; then
             MTR_LAST_LOSS="$MTR_LAST_LOSS_RAW"
@@ -301,6 +301,13 @@ while true; do
           if [ -n "$MTR_LAST_AVG_RAW" ]; then
             MTR_LAST_AVG="$MTR_LAST_AVG_RAW"
           fi
+
+          MTR_REPORT_JSON=$(printf "%s\n" "$MTR_PARSED_LINES" | awk -F'|' '{
+            hop=$1; host=$2; loss=$3; sent=$4; last=$5; avg=$6; best=$7; worst=$8; stdev=$9;
+            gsub(/"/, "\\\"", host);
+            printf("{\"hop\":%s,\"host\":\"%s\",\"loss_pct\":%s,\"sent\":%s,\"last_ms\":%s,\"avg_ms\":%s,\"best_ms\":%s,\"worst_ms\":%s,\"stdev_ms\":%s}\n", hop, host, loss, sent, last, avg, best, worst, stdev);
+          }' | paste -sd',' -)
+          MTR_REPORT_JSON="[$MTR_REPORT_JSON]"
         fi
       fi
     fi
@@ -309,7 +316,7 @@ while true; do
 
     # JSON-style log line, including target name
     LOG_LINE=$(cat <<EOF
-{"timestamp":"$TS","target":"$TARGET_NAME","src_ip":"$SRC_IP","public_ip":"$PUB_IP","dst_host":"$TARGET_HOST_CURRENT","dst_ip":"$DST_IP","sent":$SENT,"received":$RECEIVED,"loss_pct":$LOSS,"rtt_avg_ms":$RTT_AVG,"mtr_hops":$MTR_HOPS,"mtr_last_hop":"$MTR_LAST_HOP_ESCAPED","mtr_last_loss_pct":$MTR_LAST_LOSS,"mtr_last_avg_ms":$MTR_LAST_AVG}
+{"timestamp":"$TS","target":"$TARGET_NAME","src_ip":"$SRC_IP","public_ip":"$PUB_IP","dst_host":"$TARGET_HOST_CURRENT","dst_ip":"$DST_IP","sent":$SENT,"received":$RECEIVED,"loss_pct":$LOSS,"rtt_avg_ms":$RTT_AVG,"mtr_hops":$MTR_HOPS,"mtr_last_hop":"$MTR_LAST_HOP_ESCAPED","mtr_last_loss_pct":$MTR_LAST_LOSS,"mtr_last_avg_ms":$MTR_LAST_AVG,"mtr_report":$MTR_REPORT_JSON}
 EOF
 )
 
