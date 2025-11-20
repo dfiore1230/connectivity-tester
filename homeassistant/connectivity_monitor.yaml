@@ -1,0 +1,71 @@
+###############################################################################
+# Connectivity Monitor Package
+# - REST sensors reading from HTTPS + Basic Auth
+# - Binary sensor for internet up/down
+# - Works with your reverse proxy at https://connectivity.fior.es
+###############################################################################
+
+rest:
+  - resource: "https://connectivity.fior.es/data"
+    scan_interval: 30
+    timeout: 5
+
+    # HTTPS options
+    verify_ssl: false                # disable if cert is self-signed / untrusted
+
+    # Basic Authentication
+    authentication: basic
+    username: "dfiore"
+    password: "Veedubs1@"   # <-- replace with your password
+
+    sensor:
+      - name: "Connectivity Last Loss"
+        unique_id: connectivity_last_loss
+        value_template: "{{ value_json[-1].loss_pct }}"
+        unit_of_measurement: "%"
+        state_class: measurement
+
+      - name: "Connectivity Last RTT"
+        unique_id: connectivity_last_rtt
+        value_template: "{{ value_json[-1].rtt_avg_ms }}"
+        unit_of_measurement: "ms"
+        state_class: measurement
+
+      - name: "Connectivity Last Target"
+        unique_id: connectivity_last_target
+        value_template: >
+          {{ value_json[-1].target
+             if value_json[-1].target is defined and value_json[-1].target is not none
+             else value_json[-1].dst_host }}
+        icon: mdi:target-variant
+
+      - name: "Connectivity Last Public IP"
+        unique_id: connectivity_last_public_ip
+        value_template: "{{ value_json[-1].public_ip }}"
+        icon: mdi:ip-network
+
+      - name: "Connectivity Last Source IP"
+        unique_id: connectivity_last_src_ip
+        value_template: "{{ value_json[-1].src_ip }}"
+        icon: mdi:lan
+
+      - name: "Connectivity Last Timestamp"
+        unique_id: connectivity_last_timestamp
+        value_template: "{{ value_json[-1].timestamp }}"
+        icon: mdi:clock-outline
+
+binary_sensor:
+  - platform: template
+    sensors:
+      internet_up:
+        friendly_name: "Internet Up"
+        value_template: >
+          {% set loss = states('sensor.connectivity_last_loss') | float(100) %}
+          {{ loss < 100 }}
+        icon_template: >
+          {% if is_state('binary_sensor.internet_up', 'on') %}
+            mdi:check-circle
+          {% else %}
+            mdi:alert-circle
+          {% endif %}
+
