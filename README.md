@@ -81,12 +81,21 @@ homeassistant/connectivity_monitor.yaml
 
 This provides:
 
-- RTT sensor  
-- Loss sensor  
-- Public IP sensor  
-- Source IP sensor  
-- “Internet Up” binary sensor  
+- RTT sensor
+- Loss sensor
+- Public IP sensor
+- Source IP sensor
+- “Internet Up” binary sensor
 - Sidebar dashboard (HTTPS-safe)
+
+Before loading the package, add secrets for your hostname and credentials so you avoid storing personal data in version control:
+
+```
+# secrets.yaml
+connectivity_host: https://connectivity.example.com/data
+connectivity_username: your_username
+connectivity_password: your_password
+```
 
 ---
 
