@@ -7,6 +7,9 @@ INTERVAL_DEFAULT="${INTERVAL_SECONDS:-30}"
 INTERVAL="$INTERVAL_DEFAULT"
 LOG_FILE="/logs/connectivity.log"
 CONFIG_FILE="/logs/config.env"
+ROTATE_MAX_SIZE="$((1024 * 1024 * 5))"   # 5MB
+ROTATE_MAX_AGE="$((60 * 60 * 24))"      # 1 day
+ROTATE_KEEP="5"
 
 echo "Starting connectivity tester"
 echo "Default interval: ${INTERVAL_DEFAULT} seconds"
@@ -15,7 +18,40 @@ echo "Initial env TARGETS: ${TARGETS_ENV:-<none>} (TARGET_HOST=${TARGET_HOST})"
 
 touch "$LOG_FILE"
 
+rotate_logs() {
+  if [ ! -f "$LOG_FILE" ]; then
+    return
+  fi
+
+  local now
+  now="$(date +%s)"
+  local mtime
+  mtime="$(stat -c %Y "$LOG_FILE")"
+  local age
+  age=$((now - mtime))
+  local size
+  size="$(stat -c %s "$LOG_FILE")"
+
+  if [ "$size" -lt "$ROTATE_MAX_SIZE" ] && [ "$age" -lt "$ROTATE_MAX_AGE" ]; then
+    return
+  fi
+
+  local ts
+  ts="$(date -u +"%Y%m%dT%H%M%SZ")"
+  local rotated
+  rotated="/logs/connectivity-${ts}.log"
+
+  mv "$LOG_FILE" "$rotated"
+  gzip "$rotated"
+  touch "$LOG_FILE"
+
+  # Prune old archives (keep newest ROTATE_KEEP)
+  ls -1t /logs/connectivity-*.log.gz 2>/dev/null | tail -n +$((ROTATE_KEEP + 1)) | xargs -r rm -f
+}
+
 while true; do
+  rotate_logs
+
   # Reload config from /logs/config.env (if present)
   if [ -f "$CONFIG_FILE" ]; then
     NEW_TARGETS_ENV="$TARGETS_ENV"

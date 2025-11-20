@@ -2,6 +2,7 @@
 import os
 import json
 from pathlib import Path
+import time
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 
@@ -14,6 +15,90 @@ STATIC_ROOT = Path(__file__).parent / "static"
 ENV_TARGETS = os.environ.get("TARGETS", "")
 ENV_TARGET_HOST = os.environ.get("TARGET_HOST", "8.8.8.8")
 ENV_INTERVAL = os.environ.get("INTERVAL_SECONDS", "30")
+
+
+SUMMARY_CACHE = {
+    "daily_state": {},
+    "summary": [],
+    "position": 0,
+    "inode": None,
+    "size": 0,
+    "build_ts": None,
+}
+
+
+def reset_summary_cache():
+    SUMMARY_CACHE.update(
+        {
+            "daily_state": {},
+            "summary": [],
+            "position": 0,
+            "inode": None,
+            "size": 0,
+            "build_ts": None,
+        }
+    )
+
+
+def _ensure_day_state(daily: dict, day: str):
+    if day not in daily:
+        daily[day] = {
+            "date": day,
+            "total_probes": 0,
+            "total_sent": 0,
+            "total_received": 0,
+            "loss_sum": 0.0,
+            "loss_count": 0,
+            "good_probes": 0,
+            "degraded_probes": 0,
+            "down_probes": 0,
+            "rtt_sum": 0.0,
+            "rtt_count": 0,
+            "rtt_min": None,
+            "rtt_max": None,
+            "targets": set(),
+            "public_ips": set(),
+        }
+    return daily[day]
+
+
+def _summaries_from_state(daily: dict):
+    result = []
+    for day, d in daily.items():
+        if d["total_probes"] > 0:
+            uptime_pct = (
+                100.0 * (d["total_probes"] - d["down_probes"]) / d["total_probes"]
+            )
+        else:
+            uptime_pct = 0.0
+        if d["loss_count"] > 0:
+            avg_loss = d["loss_sum"] / d["loss_count"]
+        else:
+            avg_loss = 0.0
+        if d["rtt_count"] > 0:
+            avg_rtt = d["rtt_sum"] / d["rtt_count"]
+        else:
+            avg_rtt = None
+
+        result.append(
+            {
+                "date": day,
+                "total_probes": d["total_probes"],
+                "uptime_pct": uptime_pct,
+                "avg_loss_pct": avg_loss,
+                "avg_rtt_ms": avg_rtt,
+                "min_rtt_ms": d["rtt_min"],
+                "max_rtt_ms": d["rtt_max"],
+                "good_probes": d["good_probes"],
+                "degraded_probes": d["degraded_probes"],
+                "down_probes": d["down_probes"],
+                "targets": sorted(d["targets"]),
+                "public_ips": sorted(d["public_ips"]),
+            }
+        )
+
+    result.sort(key=lambda x: x["date"])
+    return result
 
 
 def read_recent_records():
@@ -65,36 +150,38 @@ def read_records_for_day(day_str: str):
 
 def build_daily_summary_from_file():
     """
-    Stream the entire log file to build per-day summaries.
-    This is your 'indefinite' historical record as long as the log is kept.
+    Build per-day summaries with a cache that reuses the last build
+    until the log file grows or changes.
     """
     if not os.path.exists(LOG_FILE):
+        reset_summary_cache()
         return []
 
-    daily = {}
+    try:
+        stat = os.stat(LOG_FILE)
+    except FileNotFoundError:
+        reset_summary_cache()
+        return []
 
-    def ensure(day):
-        if day not in daily:
-            daily[day] = {
-                "date": day,
-                "total_probes": 0,
-                "total_sent": 0,
-                "total_received": 0,
-                "loss_sum": 0.0,
-                "loss_count": 0,
-                "good_probes": 0,
-                "degraded_probes": 0,
-                "down_probes": 0,
-                "rtt_sum": 0.0,
-                "rtt_count": 0,
-                "rtt_min": None,
-                "rtt_max": None,
-                "targets": set(),
-                "public_ips": set(),
-            }
-        return daily[day]
+    cache = SUMMARY_CACHE
+    if cache["inode"] != stat.st_ino or stat.st_size < cache["size"]:
+        reset_summary_cache()
+        cache = SUMMARY_CACHE
+
+    if (
+        cache["inode"] == stat.st_ino
+        and cache["position"] == stat.st_size
+        and cache["summary"]
+    ):
+        return cache["summary"]
+
+    daily = cache["daily_state"]
+    start_pos = cache["position"] or 0
 
     with open(LOG_FILE, "r") as f:
+        if start_pos:
+            f.seek(start_pos)
+
         for line in f:
             line = line.strip()
             if not line:
@@ -108,7 +195,7 @@ def build_daily_summary_from_file():
             if not ts:
                 continue
             day = ts.split("T")[0]
-            d = ensure(day)
+            d = _ensure_day_state(daily, day)
 
             d["total_probes"] += 1
 
@@ -150,43 +237,13 @@ def build_daily_summary_from_file():
             if pub:
                 d["public_ips"].add(str(pub))
 
-    result = []
-    for day, d in daily.items():
-        if d["total_probes"] > 0:
-            uptime_pct = (
-                100.0 * (d["total_probes"] - d["down_probes"]) / d["total_probes"]
-            )
-        else:
-            uptime_pct = 0.0
-        if d["loss_count"] > 0:
-            avg_loss = d["loss_sum"] / d["loss_count"]
-        else:
-            avg_loss = 0.0
-        if d["rtt_count"] > 0:
-            avg_rtt = d["rtt_sum"] / d["rtt_count"]
-        else:
-            avg_rtt = None
+        cache["position"] = f.tell()
 
-        result.append(
-            {
-                "date": day,
-                "total_probes": d["total_probes"],
-                "uptime_pct": uptime_pct,
-                "avg_loss_pct": avg_loss,
-                "avg_rtt_ms": avg_rtt,
-                "min_rtt_ms": d["rtt_min"],
-                "max_rtt_ms": d["rtt_max"],
-                "good_probes": d["good_probes"],
-                "degraded_probes": d["degraded_probes"],
-                "down_probes": d["down_probes"],
-                "targets": sorted(d["targets"]),
-                "public_ips": sorted(d["public_ips"]),
-            }
-        )
-
-    # Sort by date ascending; frontend shows newest first or re-sorts
-    result.sort(key=lambda x: x["date"])
-    return result
+    cache["size"] = stat.st_size
+    cache["inode"] = stat.st_ino
+    cache["build_ts"] = time.time()
+    cache["summary"] = _summaries_from_state(daily)
+    return cache["summary"]
 
 
 def read_config():
@@ -723,8 +780,10 @@ class Handler(BaseHTTPRequestHandler):
         Click a date to open full details for that day in a new tab.
       </div>
       <div class="settings-actions" style="margin-top:4px;margin-bottom:4px;">
+        <button type="button" id="rebuild-daily">Rebuild summaries</button>
         <button type="button" id="export-daily">Export CSV</button>
       </div>
+      <div class="small-text" id="daily-status"></div>
       <div class="table-wrapper" style="max-height:35vh;">
         <table id="daily-table">
           <thead>
@@ -790,6 +849,35 @@ class Handler(BaseHTTPRequestHandler):
       }} catch (e) {{
         // ignore daily summary errors
       }}
+    }}
+
+    async function rebuildSummaries() {{
+      const btn = document.getElementById('rebuild-daily');
+      const status = document.getElementById('daily-status');
+      if (btn) btn.disabled = true;
+      if (status) status.textContent = 'Rebuilding...';
+
+      try {{
+        const res = await fetch('/rebuild-summaries', {{ method: 'POST' }});
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const data = await res.json();
+        if (status) status.textContent = data.message || 'Summary cache cleared.';
+        await fetchDaily();
+      }} catch (e) {{
+        if (status) status.textContent = 'Error rebuilding: ' + e;
+      }} finally {{
+        if (btn) btn.disabled = false;
+      }}
+    }}
+
+    function normalizeRows(rows) {{
+      if (!rows || rows.length === 0) return [];
+      rows.sort((a, b) => {{
+        if (a.timestamp < b.timestamp) return -1;
+        if (a.timestamp > b.timestamp) return 1;
+        return 0;
+      }});
+      return rows;
     }}
 
     function sortedRows(rows) {{
@@ -1241,6 +1329,7 @@ class Handler(BaseHTTPRequestHandler):
       }}
     }});
 
+    document.getElementById('rebuild-daily').addEventListener('click', rebuildSummaries);
     document.getElementById('export-daily').addEventListener('click', downloadDailyCsv);
 
     fetchData();
@@ -1489,6 +1578,10 @@ class Handler(BaseHTTPRequestHandler):
 """
 
     def do_POST(self):
+        if self.path == "/rebuild-summaries":
+            reset_summary_cache()
+            self._send_json({"ok": True, "message": "Summary cache cleared."})
+            return
         if self.path != "/config":
             self.send_error(404)
             return
