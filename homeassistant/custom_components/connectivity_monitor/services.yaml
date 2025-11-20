@@ -1,0 +1,21 @@
+set_config:
+  name: Update monitor configuration
+  description: Send new targets and interval settings to the connectivity monitor via /config.
+  fields:
+    targets:
+      name: Targets
+      description: Comma separated targets (e.g. Google=8.8.8.8,Cloudflare=1.1.1.1)
+      example: GoogleDNS=8.8.8.8,Cloudflare=1.1.1.1
+      required: false
+      selector:
+        text:
+    interval_seconds:
+      name: Interval seconds
+      description: Probe interval to set on the monitor.
+      required: false
+      selector:
+        number:
+          min: 5
+          max: 3600
+          unit_of_measurement: seconds
+          mode: box

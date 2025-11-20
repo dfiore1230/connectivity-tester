@@ -202,6 +202,18 @@ EOF
 )
 
     echo "$LOG_LINE" | tee -a "$LOG_FILE"
+
+    if [ -n "${WEBHOOK_URL:-}" ]; then
+      CURL_OPTS=("-s" "-m" "3" "-H" "Content-Type: application/json")
+      if [ -n "${WEBHOOK_TOKEN:-}" ]; then
+        CURL_OPTS+=("-H" "Authorization: Bearer ${WEBHOOK_TOKEN}")
+      fi
+      if [ "${WEBHOOK_INSECURE:-0}" = "1" ]; then
+        CURL_OPTS+=("-k")
+      fi
+      CURL_OPTS+=("-d" "$LOG_LINE" "${WEBHOOK_URL}")
+      curl "${CURL_OPTS[@]}" >/dev/null 2>&1 || true
+    fi
   done
 
   sleep "$INTERVAL"

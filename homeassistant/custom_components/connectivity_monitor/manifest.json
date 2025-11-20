@@ -1,0 +1,10 @@
+{
+  "domain": "connectivity_monitor",
+  "name": "Connectivity Monitor",
+  "version": "0.1.0",
+  "documentation": "https://github.com/",
+  "requirements": [],
+  "codeowners": ["@connectivity-tester-maintainers"],
+  "config_flow": true,
+  "iot_class": "local_polling"
+}

@@ -6,6 +6,12 @@ import time
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 
+try:
+    from mqtt_publisher import MqttPublisher, build_settings_from_env
+except Exception:
+    MqttPublisher = None  # type: ignore
+    build_settings_from_env = None  # type: ignore
+
 LOG_FILE = "/logs/connectivity.log"
 CONFIG_FILE = "/logs/config.env"
 MAX_RECORDS = 500
@@ -1627,10 +1633,25 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main():
+    mqtt_thread = None
+    if build_settings_from_env is not None and MqttPublisher is not None:
+        settings = build_settings_from_env()
+        if settings.enabled:
+            mqtt_thread = MqttPublisher(settings)
+            mqtt_thread.start()
+            print(
+                "MQTT publishing enabled: sending measurements to"
+                f" {settings.host}:{settings.port} on prefix {settings.topic_prefix}"
+            )
+
     server_address = ("", WEB_PORT)
     httpd = HTTPServer(server_address, Handler)
     print(f"Starting webserver on port {WEB_PORT} ...")
-    httpd.serve_forever()
+    try:
+        httpd.serve_forever()
+    finally:
+        if mqtt_thread:
+            mqtt_thread.stop()
 
 
 if __name__ == "__main__":
