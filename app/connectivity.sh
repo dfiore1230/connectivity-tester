@@ -54,6 +54,24 @@ evaluate_mtr_state() {
     return
   fi
 
+  if ! command -v mtr >/dev/null 2>&1; then
+    if command -v apk >/dev/null 2>&1; then
+      echo "INFO: mtr not found; attempting apk add mtr"
+      if apk add --no-cache mtr >/dev/null 2>&1; then
+        echo "INFO: mtr installed via apk"
+      else
+        echo "WARN: failed to install mtr via apk"
+      fi
+    elif command -v apt-get >/dev/null 2>&1; then
+      echo "INFO: mtr not found; attempting apt-get install mtr-tiny"
+      if apt-get update >/dev/null 2>&1 && apt-get install -y mtr-tiny >/dev/null 2>&1; then
+        echo "INFO: mtr installed via apt-get"
+      else
+        echo "WARN: failed to install mtr via apt-get"
+      fi
+    fi
+  fi
+
   if ! printf '%s' "$MTR_CYCLES" | grep -Eq '^[0-9]+$'; then
     MTR_CYCLES="$MTR_CYCLES_DEFAULT"
   fi
