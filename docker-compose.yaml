@@ -15,4 +15,10 @@ services:
     environment:
       - INTERVAL_SECONDS=60
       - TARGETS=GoogleDNS=8.8.8.8,Cloudflare=1.1.1.1,Gateway=172.16.42.1
+      - ENABLE_MTR=0              # set to 1 to collect hop insights (requires NET_RAW)
+      - MTR_CYCLES=1             # packets per hop when ENABLE_MTR=1
+      - MTR_MAX_HOPS=32          # maximum hops to trace
+      - MTR_TIMEOUT_SECONDS=6    # abort mtr if it hangs
+    cap_add:
+      - NET_RAW
 
