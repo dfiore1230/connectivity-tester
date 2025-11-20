@@ -16,6 +16,21 @@ echo "Default interval: ${INTERVAL_DEFAULT} seconds"
 echo "Log file: ${LOG_FILE}"
 echo "Initial env TARGETS: ${TARGETS_ENV:-<none>} (TARGET_HOST=${TARGET_HOST})"
 
+MTR_ENABLED="${ENABLE_MTR:-0}"
+MTR_CYCLES="${MTR_CYCLES:-1}"
+MTR_MAX_HOPS="${MTR_MAX_HOPS:-32}"
+MTR_TIMEOUT="${MTR_TIMEOUT_SECONDS:-6}"
+
+if [ "$MTR_ENABLED" = "1" ] && command -v mtr >/dev/null 2>&1; then
+  echo "mtr support enabled (cycles=${MTR_CYCLES}, max_hops=${MTR_MAX_HOPS}, timeout=${MTR_TIMEOUT}s)"
+  MTR_AVAILABLE=1
+else
+  MTR_AVAILABLE=0
+  if [ "$MTR_ENABLED" = "1" ]; then
+    echo "WARN: ENABLE_MTR=1 but mtr command not found; skipping path insights"
+  fi
+fi
+
 touch "$LOG_FILE"
 
 rotate_logs() {
@@ -139,9 +154,50 @@ while true; do
       RTT_AVG="$(echo "$RTT_LINE" | awk -F'/' '{print $5}')"
     fi
 
+    # Optional hop-by-hop insight via mtr (best effort)
+    MTR_HOPS=0
+    MTR_LAST_HOP=""
+    MTR_LAST_LOSS="null"
+    MTR_LAST_AVG="null"
+
+    if [ "$MTR_AVAILABLE" -eq 1 ]; then
+      MTR_OUTPUT="$(
+        timeout "${MTR_TIMEOUT}s" mtr -r -n -c "$MTR_CYCLES" -m "$MTR_MAX_HOPS" "$TARGET_HOST_CURRENT" 2>/dev/null || true
+      )"
+
+      if [ -n "$MTR_OUTPUT" ]; then
+        # Count hops and track the last visible hop's metrics
+        # Format reference: hop.|-- host loss% snt last avg best wrst stdev
+        MTR_STATS=$(echo "$MTR_OUTPUT" | awk 'NR>2 && $2!~/^-/ {
+          hop=$1; gsub("[^0-9]", "", hop);
+          host=$2;
+          loss=$3; gsub("%", "", loss);
+          avg=$(NF-3);
+          printf("%s %s %s %s\n", hop, host, loss, avg);
+        }')
+
+        if [ -n "$MTR_STATS" ]; then
+          MTR_HOPS=$(echo "$MTR_STATS" | wc -l | tr -d ' ')
+          MTR_LAST_LINE=$(echo "$MTR_STATS" | tail -n 1)
+          MTR_LAST_HOP=$(echo "$MTR_LAST_LINE" | awk '{print $2}')
+          MTR_LAST_LOSS_RAW=$(echo "$MTR_LAST_LINE" | awk '{print $3}')
+          MTR_LAST_AVG_RAW=$(echo "$MTR_LAST_LINE" | awk '{print $4}')
+
+          if [ -n "$MTR_LAST_LOSS_RAW" ]; then
+            MTR_LAST_LOSS="$MTR_LAST_LOSS_RAW"
+          fi
+          if [ -n "$MTR_LAST_AVG_RAW" ]; then
+            MTR_LAST_AVG="$MTR_LAST_AVG_RAW"
+          fi
+        fi
+      fi
+    fi
+
+    MTR_LAST_HOP_ESCAPED="$(printf '%s' "$MTR_LAST_HOP" | sed 's/"/\\"/g')"
+
     # JSON-style log line, including target name
     LOG_LINE=$(cat <<EOF
-{"timestamp":"$TS","target":"$TARGET_NAME","src_ip":"$SRC_IP","public_ip":"$PUB_IP","dst_host":"$TARGET_HOST_CURRENT","dst_ip":"$DST_IP","sent":$SENT,"received":$RECEIVED,"loss_pct":$LOSS,"rtt_avg_ms":$RTT_AVG}
+{"timestamp":"$TS","target":"$TARGET_NAME","src_ip":"$SRC_IP","public_ip":"$PUB_IP","dst_host":"$TARGET_HOST_CURRENT","dst_ip":"$DST_IP","sent":$SENT,"received":$RECEIVED,"loss_pct":$LOSS,"rtt_avg_ms":$RTT_AVG,"mtr_hops":$MTR_HOPS,"mtr_last_hop":"$MTR_LAST_HOP_ESCAPED","mtr_last_loss_pct":$MTR_LAST_LOSS,"mtr_last_avg_ms":$MTR_LAST_AVG}
 EOF
 )
 
