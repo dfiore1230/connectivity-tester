@@ -130,6 +130,15 @@ cd app
 python3 webserver.py
 ```
 
+### Running Tests
+
+Install dev dependencies and execute the automated suite:
+
+```bash
+python -m pip install -r requirements-test.txt
+pytest
+```
+
 ---
 
 ## 📝 License

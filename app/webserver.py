@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import os
 import json
+from pathlib import Path
 import time
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
@@ -9,6 +10,7 @@ LOG_FILE = "/logs/connectivity.log"
 CONFIG_FILE = "/logs/config.env"
 MAX_RECORDS = 500
 WEB_PORT = int(os.environ.get("WEB_PORT", "8080"))
+STATIC_ROOT = Path(__file__).parent / "static"
 
 ENV_TARGETS = os.environ.get("TARGETS", "")
 ENV_TARGET_HOST = os.environ.get("TARGET_HOST", "8.8.8.8")
@@ -281,6 +283,24 @@ def read_config():
 
 
 class Handler(BaseHTTPRequestHandler):
+    def _send_file(self, file_path: Path):
+        if not file_path.exists() or not file_path.is_file():
+            self.send_error(404)
+            return
+
+        mime = "text/plain"
+        if file_path.suffix == ".js":
+            mime = "text/javascript"
+        elif file_path.suffix == ".css":
+            mime = "text/css"
+
+        data = file_path.read_bytes()
+        self.send_response(200)
+        self.send_header("Content-Type", mime)
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
     def _send_json(self, data, status=200):
         payload = json.dumps(data).encode("utf-8")
         self.send_response(status)
@@ -300,6 +320,15 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         parsed = urlparse(self.path)
         path = parsed.path
+
+        if path.startswith("/static/"):
+            rel = path[len("/static/") :]
+            safe_path = (STATIC_ROOT / rel).resolve()
+            if not str(safe_path).startswith(str(STATIC_ROOT.resolve())):
+                self.send_error(404)
+                return
+            self._send_file(safe_path)
+            return
 
         if path == "/data":
             records = read_recent_records()
@@ -630,6 +659,7 @@ class Handler(BaseHTTPRequestHandler):
       text-decoration-style: dotted;
     }}
   </style>
+  <script src="/static/js/helpers.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.umd.min.js"></script>
 </head>
@@ -789,6 +819,7 @@ class Handler(BaseHTTPRequestHandler):
 
     const dailySortState = {{ index: 0, dir: 'desc' }};  // daily summary (default newest date first)
     const dailyNumericCols = new Set([1,2,3,4,5,6,7]);   // daily numeric cols
+    const helpers = window.ConnectivityHelpers;
 
     async function fetchData() {{
       try {{
@@ -850,89 +881,39 @@ class Handler(BaseHTTPRequestHandler):
     }}
 
     function sortedRows(rows) {{
-      const norm = normalizeRows([...rows]);
-      const idx = sortState.index;
-      const dir = sortState.dir;
-
-      norm.sort((a, b) => {{
-        const toArray = (r) => [
-          r.timestamp || '',
-          r.target || r.dst_host || '',
-          r.src_ip || '',
-          r.public_ip || '',
-          r.dst_host || '',
-          r.dst_ip || '',
-          r.sent,
-          r.received,
-          r.loss_pct,
-          r.rtt_avg_ms
-        ];
-
-        const A = toArray(a)[idx];
-        const B = toArray(b)[idx];
-
-        let cmp = 0;
-        if (numericCols.has(idx)) {{
-          const na = Number(A);
-          const nb = Number(B);
-          if (!isNaN(na) && !isNaN(nb)) {{
-            cmp = na - nb;
-          }} else {{
-            cmp = String(A).localeCompare(String(B));
-          }}
-        }} else {{
-          cmp = String(A).localeCompare(String(B));
-        }}
-        return dir === 'asc' ? cmp : -cmp;
-      }});
-
-      return norm;
+      const mapper = (r) => [
+        r.timestamp || '',
+        r.target || r.dst_host || '',
+        r.src_ip || '',
+        r.public_ip || '',
+        r.dst_host || '',
+        r.dst_ip || '',
+        r.sent,
+        r.received,
+        r.loss_pct,
+        r.rtt_avg_ms
+      ];
+      return helpers.sortData(rows, sortState, mapper, numericCols);
     }}
 
     function sortedDailyRows(rows) {{
-      if (!rows || rows.length === 0) return [];
-      const idx = dailySortState.index;
-      const dir = dailySortState.dir;
-
-      const copy = [...rows];
-      copy.sort((a, b) => {{
-        const toArray = (r) => [
-          r.date,
-          r.total_probes,
-          r.uptime_pct,
-          r.avg_loss_pct,
-          r.avg_rtt_ms,
-          r.min_rtt_ms,
-          r.max_rtt_ms,
-          r.down_probes,
-          (r.targets || []).join(', '),
-          (r.public_ips || []).join(', ')
-        ];
-
-        const A = toArray(a)[idx];
-        const B = toArray(b)[idx];
-
-        let cmp = 0;
-        if (dailyNumericCols.has(idx)) {{
-          const na = Number(A);
-          const nb = Number(B);
-          if (!isNaN(na) && !isNaN(nb)) {{
-            cmp = na - nb;
-          }} else {{
-            cmp = String(A).localeCompare(String(B));
-          }}
-        }} else {{
-          cmp = String(A).localeCompare(String(B));
-        }}
-
-        return dir === 'asc' ? cmp : -cmp;
-      }});
-
-      return copy;
+      const mapper = (r) => [
+        r.date,
+        r.total_probes,
+        r.uptime_pct,
+        r.avg_loss_pct,
+        r.avg_rtt_ms,
+        r.min_rtt_ms,
+        r.max_rtt_ms,
+        r.down_probes,
+        (r.targets || []).join(', '),
+        (r.public_ips || []).join(', ')
+      ];
+      return helpers.sortData(rows, dailySortState, mapper, dailyNumericCols);
     }}
 
     function buildChartData(rows) {{
-      const norm = normalizeRows([...rows]);
+      const norm = helpers.normalizeRows([...rows]);
       if (norm.length === 0) return {{ labels: [], fullLabels: [], datasetsRtt: [], datasetsUp: [] }};
 
       const fullLabels = norm.map(r => r.timestamp || '');
@@ -1021,7 +1002,7 @@ class Handler(BaseHTTPRequestHandler):
       }}
 
       const norm = sortedRows(rows);
-      const latest = normalizeRows([...rows])[rows.length - 1];
+      const latest = helpers.normalizeRows([...rows])[rows.length - 1];
       const loss = Number(latest.loss_pct || 0);
       const status = document.getElementById('status');
 
@@ -1260,10 +1241,10 @@ class Handler(BaseHTTPRequestHandler):
       uptimeChart._fullLabels = fullLabels;
     }}
 
-    function updateInfoPanel(rows) {{
-      if (!rows || rows.length === 0) return;
-      const norm = normalizeRows([...rows]);
-      const latest = norm[norm.length - 1];
+      function updateInfoPanel(rows) {{
+        if (!rows || rows.length === 0) return;
+        const norm = helpers.normalizeRows([...rows]);
+        const latest = norm[norm.length - 1];
 
       document.getElementById('info-target').textContent =
         latest.target || latest.dst_host || '-';
@@ -1278,51 +1259,10 @@ class Handler(BaseHTTPRequestHandler):
       document.getElementById('info-samples').textContent = norm.length.toString();
     }}
 
-    function csvEscape(val) {{
-      if (val === null || val === undefined) return '';
-      const s = String(val);
-      if (/[",\\n]/.test(s)) {{
-        return '"' + s.replace(/"/g, '""') + '"';
-      }}
-      return s;
-    }}
-
     function downloadDailyCsv() {{
       if (!dailySummary || dailySummary.length === 0) return;
 
-      const header = [
-        'date',
-        'total_probes',
-        'uptime_pct',
-        'avg_loss_pct',
-        'avg_rtt_ms',
-        'min_rtt_ms',
-        'max_rtt_ms',
-        'down_probes',
-        'targets',
-        'public_ips'
-      ];
-
-      const lines = [];
-      lines.push(header.join(','));
-
-      dailySummary.forEach(d => {{
-        const row = [
-          d.date,
-          d.total_probes,
-          d.uptime_pct,
-          d.avg_loss_pct,
-          d.avg_rtt_ms,
-          d.min_rtt_ms,
-          d.max_rtt_ms,
-          d.down_probes,
-          (d.targets || []).join('; '),
-          (d.public_ips || []).join('; ')
-        ].map(csvEscape);
-        lines.push(row.join(','));
-      }});
-
-      const csv = lines.join('\\n');
+      const csv = helpers.buildDailyCsv(dailySummary);
       const blob = new Blob([csv], {{ type: 'text/csv' }});
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -1513,12 +1453,13 @@ class Handler(BaseHTTPRequestHandler):
       border-radius: 6px;
       border: 1px solid #374151;
     }}
-    .small-text {{
+  .small-text {{
       font-size: 11px;
       color: #9ca3af;
       margin-top: 4px;
     }}
   </style>
+  <script src="/static/js/helpers.js"></script>
 </head>
 <body>
   <div class="container">
@@ -1561,6 +1502,7 @@ class Handler(BaseHTTPRequestHandler):
 
   <script>
     (function() {{
+      const helpers = window.ConnectivityHelpers;
       const table = document.getElementById('day-table');
       const tbody = table.querySelector('tbody');
       const headerCells = table.querySelectorAll('thead th');
@@ -1610,30 +1552,16 @@ class Handler(BaseHTTPRequestHandler):
         }});
       }});
 
-      function csvEscape(val) {{
-        if (val === null || val === undefined) return '';
-        const s = String(val);
-        if (/[",\\n]/.test(s)) {{
-          return '"' + s.replace(/"/g, '""') + '"';
-        }}
-        return s;
-      }}
+        function exportDayCsv() {{
+          const headerRow = Array.from(headerCells).map(th => th.textContent.trim());
+          const rows = getRowsArray().map(tr => (
+            Array.from(tr.querySelectorAll('td')).map(td => td.textContent.trim())
+          ));
 
-      function exportDayCsv() {{
-        const headerRow = Array.from(headerCells).map(th => th.textContent.trim());
-        const lines = [];
-        lines.push(headerRow.map(csvEscape).join(','));
-
-        const rows = getRowsArray();
-        rows.forEach(tr => {{
-          const cols = Array.from(tr.querySelectorAll('td')).map(td => td.textContent.trim());
-          lines.push(cols.map(csvEscape).join(','));
-        }});
-
-        const csv = lines.join('\\n');
-        const blob = new Blob([csv], {{ type: 'text/csv' }});
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
+          const csv = helpers.buildCsv(headerRow, rows);
+          const blob = new Blob([csv], {{ type: 'text/csv' }});
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
         a.href = url;
         a.download = 'connectivity-{day}.csv';
         document.body.appendChild(a);
