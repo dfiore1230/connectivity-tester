@@ -56,6 +56,11 @@ Dashboard will be available at:
 **http://localhost:8080**
 (or behind your reverse proxy)
 
+> All runtime settings (targets, interval, and mtr options) are read from the
+> `environment` block in `docker-compose.yaml`. On startup the container writes
+> those values into `/logs/config.env` so the probe loop and UI stay aligned.
+> Update the compose file to change behavior, then restart the stack.
+
 ### Optional hop insight via mtr
 
 If you want hop-by-hop visibility, enable `mtr` in the probe container. Docker Compose example (adds the needed raw-socket capability):
