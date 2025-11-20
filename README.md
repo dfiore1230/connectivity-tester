@@ -58,13 +58,23 @@ Dashboard will be available at:
 
 ### Optional hop insight via mtr
 
-If you want hop-by-hop visibility, enable `mtr` in the probe container:
+If you want hop-by-hop visibility, enable `mtr` in the probe container. Docker Compose example (adds the needed raw-socket capability):
+
+```yaml
+services:
+  connectivity-monitor:
+    environment:
+      - ENABLE_MTR=1           # turn on hop tracing
+      - MTR_CYCLES=2           # how many probes per hop (default: 1)
+      - MTR_MAX_HOPS=32        # stop after this many hops
+      - MTR_TIMEOUT_SECONDS=6  # fail fast if a run hangs
+    cap_add:
+      - NET_RAW               # required for mtr/ping raw sockets
+```
+
+Then rebuild/restart:
 
 ```bash
-ENABLE_MTR=1 \
-MTR_CYCLES=2 \            # how many probes per hop (default: 1)
-MTR_MAX_HOPS=32 \          # stop after this many hops
-MTR_TIMEOUT_SECONDS=6 \    # fail fast if a run hangs
 docker compose up -d --build
 ```
 
