@@ -88,22 +88,26 @@ Add **basic auth** and TLS for secure access.
 
 ## 🏠 Home Assistant Integration
 
-Use the included:
+There are now **two ways** to connect Home Assistant:
+
+1) **Full custom integration** (UI-first)
+
+- Install the folder `homeassistant/custom_components/connectivity_monitor` as a custom integration.
+- Add it via the UI (`Settings` → `Devices & Services` → `Add Integration` → `Connectivity Monitor`).
+- Configure host/auth/scan interval without YAML and get these entities:
+  - Sensors: last loss %, RTT, target, public IP, source IP, timestamp, mtr hop loss/latency/name, daily uptime %, daily average/min/max RTT, daily average loss.
+  - Binary sensor: internet up/down (derived from loss %).
+- Service `connectivity_monitor.set_config` sends updates to `/config` so you can change targets/intervals from automations.
+
+2) **Legacy REST package** (YAML)
+
+Use the included package if you prefer a lightweight YAML setup:
 
 ```
 homeassistant/connectivity_monitor.yaml
 ```
 
-This provides:
-
-- RTT sensor
-- Loss sensor
-- Public IP sensor
-- Source IP sensor
-- “Internet Up” binary sensor
-- Sidebar dashboard (HTTPS-safe)
-
-Before loading the package, add secrets for your hostname and credentials so you avoid storing personal data in version control:
+It still provides the basic REST + binary sensors and sidebar view. Before loading the package, add secrets for your hostname and credentials so you avoid storing personal data in version control:
 
 ```
 # secrets.yaml
@@ -123,6 +127,13 @@ All logs are stored at:
 ```
 
 They persist across container restarts.
+
+### MQTT + Webhooks
+
+- Set `ENABLE_MQTT=1` with `MQTT_HOST`, `MQTT_PORT` (default 1883), `MQTT_USERNAME`/`MQTT_PASSWORD` (optional), `MQTT_TLS=1` (optional), and `MQTT_TOPIC_PREFIX` (default `connectivity`) to publish every measurement to MQTT topics:
+  - `${MQTT_TOPIC_PREFIX}/measurements` (raw JSON log lines)
+  - `${MQTT_TOPIC_PREFIX}/status` (internet_up flag, loss, RTT)
+- Set `WEBHOOK_URL` (with optional `WEBHOOK_TOKEN` bearer token and `WEBHOOK_INSECURE=1` for self-signed endpoints) to POST each measurement immediately to another service such as a Home Assistant webhook.
 
 ---
 
