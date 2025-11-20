@@ -25,6 +25,27 @@ MTR_TIMEOUT="$MTR_TIMEOUT_DEFAULT"
 MTR_AVAILABLE=0
 MTR_WARNED=0
 
+strip_cr() {
+  printf '%s' "$1" | tr -d '\r'
+}
+
+trim_ws() {
+  local val
+  val="$(strip_cr "$1")"
+  # Trim leading whitespace
+  val="${val#${val%%[![:space:]]*}}"
+  # Trim trailing whitespace
+  val="${val%${val##*[![:space:]]}}"
+  printf '%s' "$val"
+}
+
+normalize_value() {
+  # Remove inline comments and surrounding whitespace
+  local val
+  val="${1%%#*}"
+  trim_ws "$val"
+}
+
 echo "Starting connectivity tester"
 echo "Default interval: ${INTERVAL_DEFAULT} seconds"
 echo "Log file: ${LOG_FILE}"
@@ -33,7 +54,7 @@ echo "Startup MTR parameters: ENABLE_MTR=${MTR_ENABLED_RAW_DEFAULT}, CYCLES=${MT
 
 is_truthy() {
   local value
-  value="${1:-}"
+  value="$(normalize_value "${1:-}")"
   value="$(echo "$value" | tr '[:upper:]' '[:lower:]')"
   case "$value" in
     1|true|yes|on) return 0 ;;
@@ -102,20 +123,6 @@ evaluate_mtr_state
 mkdir -p "$LOG_ROOT"
 touch "$LOG_FILE"
 
-strip_cr() {
-  printf '%s' "$1" | tr -d '\r'
-}
-
-trim_ws() {
-  local val
-  val="$(strip_cr "$1")"
-  # Trim leading whitespace
-  val="${val#${val%%[![:space:]]*}}"
-  # Trim trailing whitespace
-  val="${val%${val##*[![:space:]]}}"
-  printf '%s' "$val"
-}
-
 rotate_logs() {
   if [ ! -f "$LOG_FILE" ]; then
     return
@@ -161,7 +168,7 @@ while true; do
   if [ -f "$CONFIG_FILE" ]; then
     while IFS='=' read -r key value; do
       key="$(trim_ws "$key")"
-      value="$(trim_ws "$value")"
+      value="$(normalize_value "$value")"
 
       case "$key" in
         ''|\#*) continue ;;
