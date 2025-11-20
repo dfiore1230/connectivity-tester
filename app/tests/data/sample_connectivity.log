@@ -1,0 +1,5 @@
+{"timestamp":"2024-06-01T10:00:00Z","target":"GoogleDNS","dst_host":"8.8.8.8","dst_ip":"8.8.8.8","src_ip":"10.0.0.2","public_ip":"203.0.113.5","sent":5,"received":5,"loss_pct":0,"rtt_avg_ms":12.5}
+{"timestamp":"2024-06-01T12:00:00Z","target":"Cloudflare","dst_host":"1.1.1.1","dst_ip":"1.1.1.1","src_ip":"10.0.0.2","public_ip":"203.0.113.5","sent":5,"received":4,"loss_pct":20,"rtt_avg_ms":18.1}
+{"timestamp":"2024-06-01T14:00:00Z","target":"Cloudflare","dst_host":"1.1.1.1","dst_ip":"1.1.1.1","src_ip":"10.0.0.2","public_ip":"203.0.113.6","sent":5,"received":0,"loss_pct":100,"rtt_avg_ms":null}
+{"timestamp":"2024-06-02T09:00:00Z","target":"GoogleDNS","dst_host":"8.8.8.8","dst_ip":"8.8.8.8","src_ip":"10.0.0.2","public_ip":"203.0.113.7","sent":5,"received":5,"loss_pct":0,"rtt_avg_ms":10.2}
+{"timestamp":"2024-06-02T18:30:00Z","target":"Quad9","dst_host":"9.9.9.9","dst_ip":"9.9.9.9","src_ip":"10.0.0.2","public_ip":"203.0.113.7","sent":5,"received":5,"loss_pct":0,"rtt_avg_ms":15.8}
