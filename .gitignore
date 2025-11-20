@@ -9,7 +9,6 @@ __pycache__/
 # Docker
 *.pid
 .env
-config.env
 
 # Home Assistant
 *.storage/
