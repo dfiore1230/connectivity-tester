@@ -189,6 +189,7 @@ while true; do
     SRC_IP="$(ip route get "$TARGET_HOST_CURRENT" 2>/dev/null | awk '/src/ {for (i=1;i<=NF;i++) if ($i=="src") print $(i+1)}')"
     if [ -z "${SRC_IP:-}" ]; then
       SRC_IP="unknown"
+      echo "WARN: could not determine local src IP for ${TARGET_HOST_CURRENT}; ip route get returned no src"
     fi
 
     # Short ping test (5 packets, 1s timeout each)
@@ -218,9 +219,15 @@ while true; do
     MTR_LAST_AVG="null"
 
     if [ "$MTR_AVAILABLE" -eq 1 ]; then
-    MTR_OUTPUT="$(
-        timeout "$MTR_TIMEOUT" mtr -r -n -c "$MTR_CYCLES" -m "$MTR_MAX_HOPS" "$TARGET_HOST_CURRENT" 2>/dev/null || true
-      )"
+      MTR_OUTPUT=""
+      MTR_EXIT=0
+      if ! MTR_OUTPUT="$(timeout "$MTR_TIMEOUT" mtr -r -n -c "$MTR_CYCLES" -m "$MTR_MAX_HOPS" "$TARGET_HOST_CURRENT" 2>&1)"; then
+        MTR_EXIT=$?
+      fi
+
+      if [ "$MTR_EXIT" -ne 0 ] || [ -z "$MTR_OUTPUT" ]; then
+        echo "WARN: mtr run failed for ${TARGET_HOST_CURRENT} (exit=${MTR_EXIT}, output=${MTR_OUTPUT:-<empty>})"
+      fi
 
       if [ -n "$MTR_OUTPUT" ]; then
         # Count hops and track the last visible hop's metrics
