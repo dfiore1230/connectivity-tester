@@ -22,7 +22,7 @@ STATIC_ROOT = Path(__file__).parent / "static"
 ENV_TARGETS = os.environ.get("TARGETS", "")
 ENV_TARGET_HOST = os.environ.get("TARGET_HOST", "8.8.8.8")
 ENV_INTERVAL = os.environ.get("INTERVAL_SECONDS", "30")
-ENV_ENABLE_MTR = os.environ.get("ENABLE_MTR", "0")
+ENV_ENABLE_MTR = os.environ.get("ENABLE_MTR", "1")
 ENV_MTR_CYCLES = os.environ.get("MTR_CYCLES", "1")
 ENV_MTR_MAX_HOPS = os.environ.get("MTR_MAX_HOPS", "32")
 ENV_MTR_TIMEOUT = os.environ.get("MTR_TIMEOUT_SECONDS", "6")
@@ -303,7 +303,7 @@ def read_config():
     return {
         "targets_display": targets_display,
         "interval": interval,
-        "enable_mtr": cfg["enable_mtr"] or "0",
+        "enable_mtr": cfg["enable_mtr"] or "1",
         "mtr_cycles": cfg["mtr_cycles"] or "1",
         "mtr_max_hops": cfg["mtr_max_hops"] or "32",
         "mtr_timeout": cfg["mtr_timeout"] or "6",
