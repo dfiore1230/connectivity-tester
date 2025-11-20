@@ -1,7 +1,7 @@
 FROM alpine:3.20
 
-# Install ping, bash, Python, curl (for public IP lookup)
-RUN apk add --no-cache iputils bash libc-utils python3 curl
+# Install ping, bash, Python, curl (for public IP lookup), and mtr for hop insights
+RUN apk add --no-cache iputils bash libc-utils python3 curl mtr
 
 # Create log directory
 RUN mkdir -p /logs
