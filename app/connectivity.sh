@@ -16,7 +16,22 @@ echo "Default interval: ${INTERVAL_DEFAULT} seconds"
 echo "Log file: ${LOG_FILE}"
 echo "Initial env TARGETS: ${TARGETS_ENV:-<none>} (TARGET_HOST=${TARGET_HOST})"
 
-MTR_ENABLED="${ENABLE_MTR:-0}"
+is_truthy() {
+  local value
+  value="${1:-}"
+  value="$(echo "$value" | tr '[:upper:]' '[:lower:]')"
+  case "$value" in
+    1|true|yes|on) return 0 ;;
+  esac
+  return 1
+}
+
+MTR_ENABLED_RAW="${ENABLE_MTR:-0}"
+if is_truthy "$MTR_ENABLED_RAW"; then
+  MTR_ENABLED=1
+else
+  MTR_ENABLED=0
+fi
 MTR_CYCLES="${MTR_CYCLES:-1}"
 MTR_MAX_HOPS="${MTR_MAX_HOPS:-32}"
 MTR_TIMEOUT="${MTR_TIMEOUT_SECONDS:-6}"
