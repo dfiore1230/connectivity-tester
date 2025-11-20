@@ -51,6 +51,22 @@ def reset_summary_cache():
     )
 
 
+def _is_truthy(val):
+    if val is None:
+        return False
+    if isinstance(val, str):
+        cleaned = val.strip().lower()
+    else:
+        cleaned = str(val).strip().lower()
+    return cleaned in ("1", "true", "yes", "on")
+
+
+def _resolve_enable_mtr(request_value, current_value):
+    if request_value is None:
+        return _is_truthy(current_value)
+    return _is_truthy(request_value)
+
+
 def _ensure_day_state(daily: dict, day: str):
     if day not in daily:
         daily[day] = {
@@ -380,12 +396,7 @@ class Handler(BaseHTTPRequestHandler):
         self._send_html(self._render_main_page(cfg))
 
     def _render_main_page(self, cfg):
-        mtr_checked = "checked" if str(cfg.get("enable_mtr", "0")).lower() in (
-            "1",
-            "true",
-            "yes",
-            "on",
-        ) else ""
+        mtr_checked = "checked" if _is_truthy(cfg.get("enable_mtr", "0")) else ""
 
         return f"""
 <!DOCTYPE html>
@@ -1666,9 +1677,10 @@ class Handler(BaseHTTPRequestHandler):
         except json.JSONDecodeError:
             data = {}
 
+        current_cfg = read_config()
         targets = (data.get("targets") or "").strip()
         interval = (data.get("interval_seconds") or "").strip()
-        enable_mtr_raw = data.get("enable_mtr", False)
+        enable_mtr_raw = data.get("enable_mtr")
         mtr_cycles = (data.get("mtr_cycles") or "").strip()
         mtr_max_hops = (data.get("mtr_max_hops") or "").strip()
         mtr_timeout = (data.get("mtr_timeout_seconds") or "").strip()
@@ -1682,12 +1694,16 @@ class Handler(BaseHTTPRequestHandler):
         if mtr_timeout and not mtr_timeout.isdigit():
             mtr_timeout = ""
 
+        enable_mtr = _resolve_enable_mtr(
+            enable_mtr_raw, current_cfg.get("enable_mtr", ENV_ENABLE_MTR)
+        )
+
         lines = []
         if targets:
             lines.append(f"TARGETS={targets}\n")
         if interval:
             lines.append(f"INTERVAL_SECONDS={interval}\n")
-        if enable_mtr_raw:
+        if enable_mtr:
             lines.append("ENABLE_MTR=1\n")
         else:
             lines.append("ENABLE_MTR=0\n")
@@ -1715,8 +1731,7 @@ class Handler(BaseHTTPRequestHandler):
                 "ok": True,
                 "targets_display": cfg["targets_display"],
                 "interval_seconds": cfg["interval"],
-                "enable_mtr": str(cfg.get("enable_mtr", "0")).lower()
-                in ("1", "true", "yes", "on"),
+                "enable_mtr": _is_truthy(cfg.get("enable_mtr", "0")),
                 "mtr_cycles": cfg.get("mtr_cycles", ""),
                 "mtr_max_hops": cfg.get("mtr_max_hops", ""),
                 "mtr_timeout_seconds": cfg.get("mtr_timeout", ""),
