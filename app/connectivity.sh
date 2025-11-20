@@ -2,11 +2,13 @@
 set -euo pipefail
 
 TARGET_HOST="${TARGET_HOST:-8.8.8.8}"
-TARGETS_ENV="${TARGETS:-}"
+TARGETS_ENV_DEFAULT="${TARGETS:-}"
+TARGETS_ENV="$TARGETS_ENV_DEFAULT"
 INTERVAL_DEFAULT="${INTERVAL_SECONDS:-30}"
 INTERVAL="$INTERVAL_DEFAULT"
-LOG_FILE="/logs/connectivity.log"
-CONFIG_FILE="/logs/config.env"
+LOG_ROOT="/logs"
+LOG_FILE="${LOG_ROOT}/connectivity.log"
+CONFIG_FILE="${LOG_ROOT}/config.env"
 ROTATE_MAX_SIZE="$((1024 * 1024 * 5))"   # 5MB
 ROTATE_MAX_AGE="$((60 * 60 * 24))"      # 1 day
 ROTATE_KEEP="5"
@@ -26,26 +28,59 @@ is_truthy() {
   return 1
 }
 
-MTR_ENABLED_RAW="${ENABLE_MTR:-0}"
-if is_truthy "$MTR_ENABLED_RAW"; then
-  MTR_ENABLED=1
-else
-  MTR_ENABLED=0
-fi
-MTR_CYCLES="${MTR_CYCLES:-1}"
-MTR_MAX_HOPS="${MTR_MAX_HOPS:-32}"
-MTR_TIMEOUT="${MTR_TIMEOUT_SECONDS:-6}"
+MTR_ENABLED_RAW_DEFAULT="${ENABLE_MTR:-0}"
+MTR_CYCLES_DEFAULT="${MTR_CYCLES:-1}"
+MTR_MAX_HOPS_DEFAULT="${MTR_MAX_HOPS:-32}"
+MTR_TIMEOUT_DEFAULT="${MTR_TIMEOUT_SECONDS:-6}"
 
-if [ "$MTR_ENABLED" = "1" ] && command -v mtr >/dev/null 2>&1; then
-  echo "mtr support enabled (cycles=${MTR_CYCLES}, max_hops=${MTR_MAX_HOPS}, timeout=${MTR_TIMEOUT}s)"
-  MTR_AVAILABLE=1
-else
-  MTR_AVAILABLE=0
-  if [ "$MTR_ENABLED" = "1" ]; then
-    echo "WARN: ENABLE_MTR=1 but mtr command not found; skipping path insights"
+MTR_ENABLED_RAW="$MTR_ENABLED_RAW_DEFAULT"
+MTR_CYCLES="$MTR_CYCLES_DEFAULT"
+MTR_MAX_HOPS="$MTR_MAX_HOPS_DEFAULT"
+MTR_TIMEOUT="$MTR_TIMEOUT_DEFAULT"
+MTR_AVAILABLE=0
+MTR_WARNED=0
+
+evaluate_mtr_state() {
+  if is_truthy "$MTR_ENABLED_RAW"; then
+    MTR_ENABLED=1
+  else
+    MTR_ENABLED=0
   fi
-fi
 
+  if [ "$MTR_ENABLED" != "1" ]; then
+    MTR_AVAILABLE=0
+    MTR_WARNED=0
+    return
+  fi
+
+  if ! printf '%s' "$MTR_CYCLES" | grep -Eq '^[0-9]+$'; then
+    MTR_CYCLES="$MTR_CYCLES_DEFAULT"
+  fi
+  if ! printf '%s' "$MTR_MAX_HOPS" | grep -Eq '^[0-9]+$'; then
+    MTR_MAX_HOPS="$MTR_MAX_HOPS_DEFAULT"
+  fi
+  if ! printf '%s' "$MTR_TIMEOUT" | grep -Eq '^[0-9]+$'; then
+    MTR_TIMEOUT="$MTR_TIMEOUT_DEFAULT"
+  fi
+
+  if command -v mtr >/dev/null 2>&1; then
+    if [ "$MTR_AVAILABLE" != "1" ]; then
+      echo "mtr support enabled (cycles=${MTR_CYCLES}, max_hops=${MTR_MAX_HOPS}, timeout=${MTR_TIMEOUT}s)"
+    fi
+    MTR_AVAILABLE=1
+    MTR_WARNED=0
+  else
+    if [ "$MTR_WARNED" != "1" ]; then
+      echo "WARN: ENABLE_MTR=1 but mtr command not found; skipping path insights"
+      MTR_WARNED=1
+    fi
+    MTR_AVAILABLE=0
+  fi
+}
+
+evaluate_mtr_state
+
+mkdir -p "$LOG_ROOT"
 touch "$LOG_FILE"
 
 rotate_logs() {
@@ -83,20 +118,27 @@ while true; do
   rotate_logs
 
   # Reload config from /logs/config.env (if present)
-  if [ -f "$CONFIG_FILE" ]; then
-    NEW_TARGETS_ENV="$TARGETS_ENV"
-    NEW_INTERVAL="$INTERVAL"
+  TARGETS_ENV="$TARGETS_ENV_DEFAULT"
+  INTERVAL="$INTERVAL_DEFAULT"
+  MTR_ENABLED_RAW="$MTR_ENABLED_RAW_DEFAULT"
+  MTR_CYCLES="$MTR_CYCLES_DEFAULT"
+  MTR_MAX_HOPS="$MTR_MAX_HOPS_DEFAULT"
+  MTR_TIMEOUT="$MTR_TIMEOUT_DEFAULT"
 
+  if [ -f "$CONFIG_FILE" ]; then
     while IFS='=' read -r key value; do
       case "$key" in
-        TARGETS) NEW_TARGETS_ENV="$value" ;;
-        INTERVAL_SECONDS) NEW_INTERVAL="$value" ;;
+        TARGETS) TARGETS_ENV="$value" ;;
+        INTERVAL_SECONDS) INTERVAL="$value" ;;
+        ENABLE_MTR) MTR_ENABLED_RAW="$value" ;;
+        MTR_CYCLES) MTR_CYCLES="$value" ;;
+        MTR_MAX_HOPS) MTR_MAX_HOPS="$value" ;;
+        MTR_TIMEOUT_SECONDS) MTR_TIMEOUT="$value" ;;
       esac
     done < "$CONFIG_FILE"
-
-    TARGETS_ENV="$NEW_TARGETS_ENV"
-    INTERVAL="$NEW_INTERVAL"
   fi
+
+  evaluate_mtr_state
 
   # Fallbacks / validation
   if [ -z "${TARGETS_ENV:-}" ]; then
@@ -176,8 +218,8 @@ while true; do
     MTR_LAST_AVG="null"
 
     if [ "$MTR_AVAILABLE" -eq 1 ]; then
-      MTR_OUTPUT="$(
-        timeout "${MTR_TIMEOUT}s" mtr -r -n -c "$MTR_CYCLES" -m "$MTR_MAX_HOPS" "$TARGET_HOST_CURRENT" 2>/dev/null || true
+    MTR_OUTPUT="$(
+        timeout "$MTR_TIMEOUT" mtr -r -n -c "$MTR_CYCLES" -m "$MTR_MAX_HOPS" "$TARGET_HOST_CURRENT" 2>/dev/null || true
       )"
 
       if [ -n "$MTR_OUTPUT" ]; then

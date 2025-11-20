@@ -22,6 +22,10 @@ STATIC_ROOT = Path(__file__).parent / "static"
 ENV_TARGETS = os.environ.get("TARGETS", "")
 ENV_TARGET_HOST = os.environ.get("TARGET_HOST", "8.8.8.8")
 ENV_INTERVAL = os.environ.get("INTERVAL_SECONDS", "30")
+ENV_ENABLE_MTR = os.environ.get("ENABLE_MTR", "0")
+ENV_MTR_CYCLES = os.environ.get("MTR_CYCLES", "1")
+ENV_MTR_MAX_HOPS = os.environ.get("MTR_MAX_HOPS", "32")
+ENV_MTR_TIMEOUT = os.environ.get("MTR_TIMEOUT_SECONDS", "6")
 
 
 SUMMARY_CACHE = {
@@ -256,10 +260,17 @@ def build_daily_summary_from_file():
 def read_config():
     """
     Read config.env if present and merge with env defaults.
-    Returns (targets_display, interval_str).
+    Returns a dict of effective settings used by the UI.
     """
-    targets = ENV_TARGETS
-    interval = ENV_INTERVAL
+
+    cfg = {
+        "targets": ENV_TARGETS,
+        "interval": ENV_INTERVAL,
+        "enable_mtr": ENV_ENABLE_MTR,
+        "mtr_cycles": ENV_MTR_CYCLES,
+        "mtr_max_hops": ENV_MTR_MAX_HOPS,
+        "mtr_timeout": ENV_MTR_TIMEOUT,
+    }
 
     if os.path.exists(CONFIG_FILE):
         try:
@@ -272,21 +283,31 @@ def read_config():
                     k = k.strip()
                     v = v.strip()
                     if k == "TARGETS":
-                        targets = v
+                        cfg["targets"] = v
                     elif k == "INTERVAL_SECONDS":
-                        interval = v
+                        cfg["interval"] = v
+                    elif k == "ENABLE_MTR":
+                        cfg["enable_mtr"] = v
+                    elif k == "MTR_CYCLES":
+                        cfg["mtr_cycles"] = v
+                    elif k == "MTR_MAX_HOPS":
+                        cfg["mtr_max_hops"] = v
+                    elif k == "MTR_TIMEOUT_SECONDS":
+                        cfg["mtr_timeout"] = v
         except Exception:
             pass
 
-    if not targets:
-        targets_display = ENV_TARGETS or ENV_TARGET_HOST
-    else:
-        targets_display = targets
+    targets_display = cfg["targets"] or ENV_TARGETS or ENV_TARGET_HOST
+    interval = cfg["interval"] or ENV_INTERVAL or "30"
 
-    if not interval:
-        interval = ENV_INTERVAL or "30"
-
-    return targets_display, interval
+    return {
+        "targets_display": targets_display,
+        "interval": interval,
+        "enable_mtr": cfg["enable_mtr"] or "0",
+        "mtr_cycles": cfg["mtr_cycles"] or "1",
+        "mtr_max_hops": cfg["mtr_max_hops"] or "32",
+        "mtr_timeout": cfg["mtr_timeout"] or "6",
+    }
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -355,10 +376,17 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         # Main dashboard
-        targets_display, interval_str = read_config()
-        self._send_html(self._render_main_page(targets_display, interval_str))
+        cfg = read_config()
+        self._send_html(self._render_main_page(cfg))
 
-    def _render_main_page(self, targets_display, interval_str):
+    def _render_main_page(self, cfg):
+        mtr_checked = "checked" if str(cfg.get("enable_mtr", "0")).lower() in (
+            "1",
+            "true",
+            "yes",
+            "on",
+        ) else ""
+
         return f"""
 <!DOCTYPE html>
 <html lang="en">
@@ -678,8 +706,9 @@ class Handler(BaseHTTPRequestHandler):
         Visualizes RTT, loss, and IP info for one or more targets.
       </div>
       <div class="meta-row">
-        <span><strong>Targets:</strong> <span id="meta-targets">{targets_display}</span></span>
-        <span><strong>Probe interval:</strong> ~<span id="meta-interval">{interval_str}</span>s</span>
+        <span><strong>Targets:</strong> <span id="meta-targets">{cfg['targets_display']}</span></span>
+        <span><strong>Probe interval:</strong> ~<span id="meta-interval">{cfg['interval']}</span>s</span>
+        <span><strong>Hop tracing (mtr):</strong> <span id="meta-mtr">{"on" if mtr_checked else "off"}</span></span>
         <span><strong>Last update:</strong> <span id="last-update">never</span></span>
       </div>
       <div id="status" class="small">Loading...</div>
@@ -739,11 +768,32 @@ class Handler(BaseHTTPRequestHandler):
           <h3 style="margin:0 0 6px 0;font-size:13px;">Settings</h3>
           <div class="settings-row">
             <label for="cfg-targets">Targets (comma-separated, e.g. <code>GoogleDNS=8.8.8.8,Cloudflare=1.1.1.1</code>)</label>
-            <input id="cfg-targets" type="text" value="{targets_display}">
+            <input id="cfg-targets" type="text" value="{cfg['targets_display']}">
           </div>
           <div class="settings-row">
             <label for="cfg-interval">Probe interval (seconds)</label>
-            <input id="cfg-interval" type="number" min="1" value="{interval_str}">
+            <input id="cfg-interval" type="number" min="1" value="{cfg['interval']}">
+          </div>
+          <div class="settings-row">
+            <label>
+              <input id="cfg-enable-mtr" type="checkbox" {mtr_checked}>
+              Enable hop tracing (mtr)
+            </label>
+            <div class="small-text">Requires mtr installed + NET_RAW capability in the container.</div>
+          </div>
+          <div class="settings-row" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;">
+            <div>
+              <label for="cfg-mtr-cycles">MTR cycles</label>
+              <input id="cfg-mtr-cycles" type="number" min="1" value="{cfg['mtr_cycles']}">
+            </div>
+            <div>
+              <label for="cfg-mtr-max-hops">Max hops</label>
+              <input id="cfg-mtr-max-hops" type="number" min="1" value="{cfg['mtr_max_hops']}">
+            </div>
+            <div>
+              <label for="cfg-mtr-timeout">Timeout (s)</label>
+              <input id="cfg-mtr-timeout" type="number" min="1" value="{cfg['mtr_timeout']}">
+            </div>
           </div>
           <div class="settings-actions">
             <button type="button" id="save-config">Save</button>
@@ -1318,18 +1368,34 @@ class Handler(BaseHTTPRequestHandler):
     document.getElementById('save-config').addEventListener('click', async () => {{
       const targets = document.getElementById('cfg-targets').value.trim();
       const interval = document.getElementById('cfg-interval').value.trim();
+      const enableMtr = document.getElementById('cfg-enable-mtr').checked;
+      const mtrCycles = document.getElementById('cfg-mtr-cycles').value.trim();
+      const mtrMaxHops = document.getElementById('cfg-mtr-max-hops').value.trim();
+      const mtrTimeout = document.getElementById('cfg-mtr-timeout').value.trim();
       const statusEl = document.getElementById('settings-status');
 
       try {{
         const res = await fetch('/config', {{
           method: 'POST',
           headers: {{ 'Content-Type': 'application/json' }},
-          body: JSON.stringify({{ targets, interval_seconds: interval }})
+          body: JSON.stringify({{
+            targets,
+            interval_seconds: interval,
+            enable_mtr: enableMtr,
+            mtr_cycles: mtrCycles,
+            mtr_max_hops: mtrMaxHops,
+            mtr_timeout_seconds: mtrTimeout,
+          }})
         }});
         if (!res.ok) throw new Error('HTTP ' + res.status);
         const data = await res.json();
         document.getElementById('meta-targets').textContent = data.targets_display;
         document.getElementById('meta-interval').textContent = data.interval_seconds;
+        document.getElementById('meta-mtr').textContent = data.enable_mtr ? 'on' : 'off';
+        document.getElementById('cfg-enable-mtr').checked = !!data.enable_mtr;
+        if (data.mtr_cycles) document.getElementById('cfg-mtr-cycles').value = data.mtr_cycles;
+        if (data.mtr_max_hops) document.getElementById('cfg-mtr-max-hops').value = data.mtr_max_hops;
+        if (data.mtr_timeout_seconds) document.getElementById('cfg-mtr-timeout').value = data.mtr_timeout_seconds;
         statusEl.textContent = 'Saved. Changes apply on the next probe cycle.';
       }} catch (e) {{
         statusEl.textContent = 'Error saving config: ' + e;
@@ -1602,15 +1668,35 @@ class Handler(BaseHTTPRequestHandler):
 
         targets = (data.get("targets") or "").strip()
         interval = (data.get("interval_seconds") or "").strip()
+        enable_mtr_raw = data.get("enable_mtr", False)
+        mtr_cycles = (data.get("mtr_cycles") or "").strip()
+        mtr_max_hops = (data.get("mtr_max_hops") or "").strip()
+        mtr_timeout = (data.get("mtr_timeout_seconds") or "").strip()
 
         if interval and not interval.isdigit():
             interval = ""
+        if mtr_cycles and not mtr_cycles.isdigit():
+            mtr_cycles = ""
+        if mtr_max_hops and not mtr_max_hops.isdigit():
+            mtr_max_hops = ""
+        if mtr_timeout and not mtr_timeout.isdigit():
+            mtr_timeout = ""
 
         lines = []
         if targets:
             lines.append(f"TARGETS={targets}\n")
         if interval:
             lines.append(f"INTERVAL_SECONDS={interval}\n")
+        if enable_mtr_raw:
+            lines.append("ENABLE_MTR=1\n")
+        else:
+            lines.append("ENABLE_MTR=0\n")
+        if mtr_cycles:
+            lines.append(f"MTR_CYCLES={mtr_cycles}\n")
+        if mtr_max_hops:
+            lines.append(f"MTR_MAX_HOPS={mtr_max_hops}\n")
+        if mtr_timeout:
+            lines.append(f"MTR_TIMEOUT_SECONDS={mtr_timeout}\n")
 
         try:
             if lines:
@@ -1623,12 +1709,17 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json({"ok": False, "error": str(e)}, status=500)
             return
 
-        targets_display, interval_effective = read_config()
+        cfg = read_config()
         self._send_json(
             {
                 "ok": True,
-                "targets_display": targets_display,
-                "interval_seconds": interval_effective,
+                "targets_display": cfg["targets_display"],
+                "interval_seconds": cfg["interval"],
+                "enable_mtr": str(cfg.get("enable_mtr", "0")).lower()
+                in ("1", "true", "yes", "on"),
+                "mtr_cycles": cfg.get("mtr_cycles", ""),
+                "mtr_max_hops": cfg.get("mtr_max_hops", ""),
+                "mtr_timeout_seconds": cfg.get("mtr_timeout", ""),
             }
         )
 

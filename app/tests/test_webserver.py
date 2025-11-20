@@ -128,3 +128,35 @@ def test_js_csv_export_formatting():
     assert lines[1].startswith("2024-06-03,10,99.5")
     assert '"A,Inc; B""Corp"' in lines[1]
     assert "198.51.100.1; 198.51.100.2" in lines[1]
+
+
+def test_read_config_supports_mtr(monkeypatch, tmp_path):
+    cfg_file = tmp_path / "config.env"
+    cfg_file.write_text(
+        """
+TARGETS=Example=9.9.9.9
+INTERVAL_SECONDS=45
+ENABLE_MTR=1
+MTR_CYCLES=3
+MTR_MAX_HOPS=20
+MTR_TIMEOUT_SECONDS=8
+""".strip()
+    )
+
+    monkeypatch.setattr(webserver, "CONFIG_FILE", str(cfg_file))
+    monkeypatch.setattr(webserver, "ENV_TARGETS", "")
+    monkeypatch.setattr(webserver, "ENV_TARGET_HOST", "8.8.8.8")
+    monkeypatch.setattr(webserver, "ENV_INTERVAL", "30")
+    monkeypatch.setattr(webserver, "ENV_ENABLE_MTR", "0")
+    monkeypatch.setattr(webserver, "ENV_MTR_CYCLES", "1")
+    monkeypatch.setattr(webserver, "ENV_MTR_MAX_HOPS", "32")
+    monkeypatch.setattr(webserver, "ENV_MTR_TIMEOUT", "6")
+
+    cfg = webserver.read_config()
+
+    assert cfg["targets_display"] == "Example=9.9.9.9"
+    assert cfg["interval"] == "45"
+    assert cfg["enable_mtr"] == "1"
+    assert cfg["mtr_cycles"] == "3"
+    assert cfg["mtr_max_hops"] == "20"
+    assert cfg["mtr_timeout"] == "8"
