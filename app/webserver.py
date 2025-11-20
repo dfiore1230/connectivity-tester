@@ -509,6 +509,12 @@ class Handler(BaseHTTPRequestHandler):
       gap: var(--gap);
     }}
 
+    .side-panel {{
+      display: flex;
+      flex-direction: column;
+      gap: var(--gap);
+    }}
+
     @media (min-width: 700px) {{
       .charts {{
         grid-template-columns: 1fr 1fr;
@@ -521,6 +527,47 @@ class Handler(BaseHTTPRequestHandler):
       border-radius: var(--card-radius);
       box-shadow: var(--card-shadow);
       padding: 10px 12px;
+    }}
+
+    .badge {{
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 8px;
+      border-radius: 999px;
+      border: 1px solid var(--border-color);
+      font-size: 11px;
+      color: var(--text-muted);
+      background: #f3f4f6;
+    }}
+
+    .badge.success {{
+      background: #d1fae5;
+      color: #065f46;
+      border-color: #34d399;
+    }}
+
+    .badge.warn {{
+      background: #fef3c7;
+      color: #92400e;
+      border-color: #fbbf24;
+    }}
+
+    .badge.off {{
+      background: #e5e7eb;
+      color: #374151;
+      border-color: #d1d5db;
+    }}
+
+    @media (prefers-color-scheme: dark) {{
+      .badge {{
+        background: #1f2937;
+      }}
+      .badge.off {{
+        background: #1f2937;
+        color: #9ca3af;
+        border-color: #4b5563;
+      }}
     }}
 
     .card h2 {{
@@ -704,6 +751,94 @@ class Handler(BaseHTTPRequestHandler):
       text-decoration: underline;
       text-decoration-style: dotted;
     }}
+
+    .mtr-header {{
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+    }}
+
+    .mtr-grid {{
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-top: 8px;
+    }}
+
+    .mtr-hop {{
+      display: grid;
+      grid-template-columns: 32px 1fr;
+      gap: 10px;
+      align-items: center;
+      padding: 6px 8px;
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      background: rgba(148,163,184,0.08);
+    }}
+
+    .mtr-hop-idx {{
+      font-weight: 700;
+      color: var(--text-muted);
+      text-align: center;
+    }}
+
+    .mtr-hop-body {{
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }}
+
+    .mtr-hop-head {{
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      align-items: baseline;
+      font-weight: 600;
+    }}
+
+    .mtr-hop-metrics {{
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px 10px;
+      font-size: 12px;
+      color: var(--text-muted);
+    }}
+
+    .pill {{
+      padding: 2px 6px;
+      border-radius: 999px;
+      font-size: 11px;
+      border: 1px solid var(--border-color);
+    }}
+
+    .pill.good {{ background: #d1fae5; color: #065f46; border-color: #34d399; }}
+    .pill.warn {{ background: #fef3c7; color: #92400e; border-color: #fbbf24; }}
+    .pill.bad {{ background: #fee2e2; color: #991b1b; border-color: #fca5a5; }}
+
+    @media (prefers-color-scheme: dark) {{
+      .mtr-hop {{
+        background: rgba(255,255,255,0.04);
+      }}
+      .pill.good {{ background: rgba(16,185,129,0.2); color: #34d399; border-color: rgba(52,211,153,0.4); }}
+      .pill.warn {{ background: rgba(251,191,36,0.2); color: #fbbf24; border-color: rgba(251,191,36,0.4); }}
+      .pill.bad {{ background: rgba(239,68,68,0.2); color: #fca5a5; border-color: rgba(239,68,68,0.4); }}
+    }}
+
+    .meter {{
+      position: relative;
+      width: 100%;
+      height: 8px;
+      background: rgba(148,163,184,0.4);
+      border-radius: 999px;
+      overflow: hidden;
+    }}
+
+    .meter-fill {{
+      height: 100%;
+      background: linear-gradient(90deg, #60a5fa, #6366f1);
+      border-radius: 999px;
+    }}
   </style>
   <script src="/static/js/helpers.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -749,67 +884,81 @@ class Handler(BaseHTTPRequestHandler):
         </div>
       </div>
 
-      <div class="card info-card">
-        <h2>Current Snapshot</h2>
-        <div class="subtitle">Based on the latest probe (last target logged)</div>
-        <div class="info-grid">
-          <div class="info-label">Target</div>
-          <div class="info-value" id="info-target">-</div>
+      <div class="side-panel">
+        <div class="card info-card">
+          <h2>Current Snapshot</h2>
+          <div class="subtitle">Based on the latest probe (last target logged)</div>
+          <div class="info-grid">
+            <div class="info-label">Target</div>
+            <div class="info-value" id="info-target">-</div>
 
-          <div class="info-label">Dst Host/IP</div>
-          <div class="info-value" id="info-dst">-</div>
+            <div class="info-label">Dst Host/IP</div>
+            <div class="info-value" id="info-dst">-</div>
 
-          <div class="info-label">Src IP</div>
-          <div class="info-value" id="info-src">-</div>
+            <div class="info-label">Src IP</div>
+            <div class="info-value" id="info-src">-</div>
 
-          <div class="info-label">Public IP</div>
-          <div class="info-value" id="info-public">-</div>
+            <div class="info-label">Public IP</div>
+            <div class="info-value" id="info-public">-</div>
 
-          <div class="info-label">Last RTT (ms)</div>
-          <div class="info-value" id="info-rtt">-</div>
+            <div class="info-label">Last RTT (ms)</div>
+            <div class="info-value" id="info-rtt">-</div>
 
-          <div class="info-label">Last Loss (%)</div>
-          <div class="info-value" id="info-loss">-</div>
+            <div class="info-label">Last Loss (%)</div>
+            <div class="info-value" id="info-loss">-</div>
 
-          <div class="info-label">Samples</div>
-          <div class="info-value" id="info-samples">-</div>
+            <div class="info-label">Samples</div>
+            <div class="info-value" id="info-samples">-</div>
+          </div>
+
+          <div class="settings">
+            <h3 style="margin:0 0 6px 0;font-size:13px;">Settings</h3>
+            <div class="settings-row">
+              <label for="cfg-targets">Targets (comma-separated, e.g. <code>GoogleDNS=8.8.8.8,Cloudflare=1.1.1.1</code>)</label>
+              <input id="cfg-targets" type="text" value="{cfg['targets_display']}">
+            </div>
+            <div class="settings-row">
+              <label for="cfg-interval">Probe interval (seconds)</label>
+              <input id="cfg-interval" type="number" min="1" value="{cfg['interval']}">
+            </div>
+            <div class="settings-row">
+              <label>
+                <input id="cfg-enable-mtr" type="checkbox" {mtr_checked}>
+                Enable hop tracing (mtr)
+              </label>
+              <div class="small-text">Requires mtr installed + NET_RAW capability in the container.</div>
+            </div>
+            <div class="settings-row" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;">
+              <div>
+                <label for="cfg-mtr-cycles">MTR cycles</label>
+                <input id="cfg-mtr-cycles" type="number" min="1" value="{cfg['mtr_cycles']}">
+              </div>
+              <div>
+                <label for="cfg-mtr-max-hops">Max hops</label>
+                <input id="cfg-mtr-max-hops" type="number" min="1" value="{cfg['mtr_max_hops']}">
+              </div>
+              <div>
+                <label for="cfg-mtr-timeout">Timeout (s)</label>
+                <input id="cfg-mtr-timeout" type="number" min="1" value="{cfg['mtr_timeout']}">
+              </div>
+            </div>
+            <div class="settings-actions">
+              <button type="button" id="save-config">Save</button>
+            </div>
+            <div class="small-text" id="settings-status">Changes apply on the next probe cycle.</div>
+          </div>
         </div>
 
-        <div class="settings">
-          <h3 style="margin:0 0 6px 0;font-size:13px;">Settings</h3>
-          <div class="settings-row">
-            <label for="cfg-targets">Targets (comma-separated, e.g. <code>GoogleDNS=8.8.8.8,Cloudflare=1.1.1.1</code>)</label>
-            <input id="cfg-targets" type="text" value="{cfg['targets_display']}">
-          </div>
-          <div class="settings-row">
-            <label for="cfg-interval">Probe interval (seconds)</label>
-            <input id="cfg-interval" type="number" min="1" value="{cfg['interval']}">
-          </div>
-          <div class="settings-row">
-            <label>
-              <input id="cfg-enable-mtr" type="checkbox" {mtr_checked}>
-              Enable hop tracing (mtr)
-            </label>
-            <div class="small-text">Requires mtr installed + NET_RAW capability in the container.</div>
-          </div>
-          <div class="settings-row" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;">
+        <div class="card mtr-card">
+          <div class="mtr-header">
             <div>
-              <label for="cfg-mtr-cycles">MTR cycles</label>
-              <input id="cfg-mtr-cycles" type="number" min="1" value="{cfg['mtr_cycles']}">
+              <h2>Hop Trace (mtr)</h2>
+              <div class="subtitle">Most recent hop-by-hop run from the probe log.</div>
             </div>
-            <div>
-              <label for="cfg-mtr-max-hops">Max hops</label>
-              <input id="cfg-mtr-max-hops" type="number" min="1" value="{cfg['mtr_max_hops']}">
-            </div>
-            <div>
-              <label for="cfg-mtr-timeout">Timeout (s)</label>
-              <input id="cfg-mtr-timeout" type="number" min="1" value="{cfg['mtr_timeout']}">
-            </div>
+            <span id="mtr-state" class="badge">-</span>
           </div>
-          <div class="settings-actions">
-            <button type="button" id="save-config">Save</button>
-          </div>
-          <div class="small-text" id="settings-status">Changes apply on the next probe cycle.</div>
+          <div class="small-text" id="mtr-empty">Waiting for mtr data...</div>
+          <div class="mtr-grid" id="mtr-grid"></div>
         </div>
       </div>
     </div>
@@ -888,6 +1037,7 @@ class Handler(BaseHTTPRequestHandler):
     const dailySortState = {{ index: 0, dir: 'desc' }};  // daily summary (default newest date first)
     const dailyNumericCols = new Set([1,2,3,4,5,6,7]);   // daily numeric cols
     const helpers = window.ConnectivityHelpers;
+    const mtrEnabledDefault = {"true" if _is_truthy(cfg.get("enable_mtr", "0")) else "false"};
 
     async function fetchData() {{
       try {{
@@ -898,6 +1048,7 @@ class Handler(BaseHTTPRequestHandler):
         renderTable(lastRows);
         renderCharts(lastRows);
         updateInfoPanel(lastRows);
+        renderMtrCard(lastRows);
         const lu = document.getElementById('last-update');
         if (lu) lu.textContent = new Date().toLocaleTimeString();
       }} catch (e) {{
@@ -936,6 +1087,126 @@ class Handler(BaseHTTPRequestHandler):
       }} finally {{
         if (btn) btn.disabled = false;
       }}
+    }}
+
+    function isMtrEnabled() {{
+      const meta = document.getElementById('meta-mtr');
+      const txt = (meta && meta.textContent ? meta.textContent : '').trim().toLowerCase();
+      if (txt === 'on') return true;
+      if (txt === 'off') return false;
+      return mtrEnabledDefault;
+    }}
+
+    function renderMtrCard(rows) {{
+      const grid = document.getElementById('mtr-grid');
+      const empty = document.getElementById('mtr-empty');
+      const badge = document.getElementById('mtr-state');
+      if (!grid || !empty || !badge) return;
+
+      grid.innerHTML = '';
+      empty.textContent = '';
+
+      const enabled = isMtrEnabled();
+
+      if (!rows || rows.length === 0) {{
+        badge.textContent = enabled ? 'Waiting for data' : 'Disabled';
+        badge.className = enabled ? 'badge warn' : 'badge off';
+        empty.textContent = enabled
+          ? 'No probes logged yet. First probe will include the hop trace.'
+          : 'Enable hop tracing to collect path data.';
+        return;
+      }}
+
+      const norm = helpers.normalizeRows([...rows]);
+      const latestTrace = [...norm]
+        .reverse()
+        .find((r) => Array.isArray(r.mtr_report) && r.mtr_report.length > 0);
+
+      if (!latestTrace) {{
+        badge.textContent = enabled ? 'No mtr samples yet' : 'Disabled';
+        badge.className = enabled ? 'badge warn' : 'badge off';
+        empty.textContent = enabled
+          ? 'Waiting for the next successful mtr run (requires mtr binary + NET_RAW).'
+          : 'Enable hop tracing to see per-hop latency and loss.';
+        return;
+      }}
+
+      const hops = latestTrace.mtr_report || [];
+      const worstValues = hops
+        .map((h) => Number(h.worst_ms))
+        .filter((n) => !Number.isNaN(n) && n > 0);
+      const avgValues = hops
+        .map((h) => Number(h.avg_ms))
+        .filter((n) => !Number.isNaN(n) && n > 0);
+      const meterBase = Math.max(worstValues.length ? Math.max(...worstValues) : 1, avgValues.length ? Math.max(...avgValues) : 1);
+
+      const tsLabel = latestTrace.timestamp
+        ? 'Last run ' + latestTrace.timestamp
+        : 'Latest hop trace';
+      badge.textContent = tsLabel;
+      badge.className = 'badge success';
+      empty.textContent = '';
+
+      hops.forEach((hop) => {{
+        const hopRow = document.createElement('div');
+        hopRow.className = 'mtr-hop';
+
+        const idx = document.createElement('div');
+        idx.className = 'mtr-hop-idx';
+        idx.textContent = hop.hop || '-';
+
+        const body = document.createElement('div');
+        body.className = 'mtr-hop-body';
+
+        const head = document.createElement('div');
+        head.className = 'mtr-hop-head';
+
+        const host = document.createElement('div');
+        host.textContent = hop.host || '(unknown)';
+
+        const lossVal = Number(hop.loss_pct);
+        let lossClass = 'good';
+        if (!Number.isNaN(lossVal) && lossVal > 0) {{
+          lossClass = lossVal >= 50 ? 'bad' : 'warn';
+        }}
+        const lossPill = document.createElement('span');
+        lossPill.className = 'pill ' + lossClass;
+        lossPill.textContent = Number.isNaN(lossVal)
+          ? 'Loss n/a'
+          : 'Loss ' + lossVal + '%';
+
+        head.appendChild(host);
+        head.appendChild(lossPill);
+
+        const meter = document.createElement('div');
+        meter.className = 'meter';
+        const fill = document.createElement('div');
+        fill.className = 'meter-fill';
+        const rawAvg = Number(hop.avg_ms);
+        const rawWorst = Number(hop.worst_ms);
+        const numerator = !Number.isNaN(rawAvg) && rawAvg > 0 ? rawAvg : rawWorst;
+        const width = Math.min(100, ((numerator || meterBase) / meterBase) * 100);
+        fill.style.width = width + '%';
+        meter.appendChild(fill);
+
+        const meta = document.createElement('div');
+        meta.className = 'mtr-hop-metrics';
+        meta.innerHTML = [
+          'Avg ' + (hop.avg_ms ?? 'n/a') + ' ms',
+          'Last ' + (hop.last_ms ?? 'n/a') + ' ms',
+          'Best ' + (hop.best_ms ?? 'n/a') + ' ms',
+          'Worst ' + (hop.worst_ms ?? 'n/a') + ' ms',
+          'Sent ' + (hop.sent ?? 'n/a'),
+        ].join(' · ');
+
+        body.appendChild(head);
+        body.appendChild(meter);
+        body.appendChild(meta);
+
+        hopRow.appendChild(idx);
+        hopRow.appendChild(body);
+        grid.appendChild(hopRow);
+      }});
     }}
 
     function normalizeRows(rows) {{
