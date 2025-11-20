@@ -64,7 +64,7 @@ If you want hop-by-hop visibility, enable `mtr` in the probe container. Docker C
 services:
   connectivity-monitor:
     environment:
-      - ENABLE_MTR=1           # turn on hop tracing
+      - ENABLE_MTR=1           # turn on hop tracing (1/true/yes/on)
       - MTR_CYCLES=2           # how many probes per hop (default: 1)
       - MTR_MAX_HOPS=32        # stop after this many hops
       - MTR_TIMEOUT_SECONDS=6  # fail fast if a run hangs
