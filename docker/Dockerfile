@@ -6,9 +6,10 @@ RUN apk add --no-cache iputils bash libc-utils python3 curl
 # Create log directory
 RUN mkdir -p /logs
 
-# Copy scripts into container (from repo root context)
+# Copy scripts and static assets into container (from repo root context)
 COPY app/connectivity.sh /usr/local/bin/connectivity.sh
 COPY app/webserver.py   /usr/local/bin/webserver.py
+COPY app/static         /usr/local/bin/static
 COPY docker/start.sh    /usr/local/bin/start.sh
 
 RUN chmod +x /usr/local/bin/connectivity.sh \
