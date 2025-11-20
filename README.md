@@ -83,6 +83,10 @@ Then rebuild/restart:
 docker compose up -d --build
 ```
 
+Troubleshooting mtr:
+
+- If the logs show `mtr run failed` with `Operation not permitted` or `raw socket` errors, ensure the container has raw-socket access (e.g., `cap_add: NET_RAW` or privileged mode) and then recreate the container so the capability is applied.
+
 Each log line then includes `mtr_hops`, `mtr_last_hop`, `mtr_last_loss_pct`, and `mtr_last_avg_ms` fields. If `mtr` is not installed the script logs a warning and continues without hop data.
 
 ---

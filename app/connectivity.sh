@@ -246,6 +246,10 @@ while true; do
 
       if [ "$MTR_EXIT" -ne 0 ] || [ -z "$MTR_OUTPUT" ]; then
         echo "WARN: mtr run failed for ${TARGET_HOST_CURRENT} (exit=${MTR_EXIT}, output=${MTR_OUTPUT:-<empty>})"
+
+        if echo "$MTR_OUTPUT" | grep -qiE 'Operation not permitted|raw socket'; then
+          echo "HINT: mtr needs raw-socket access; add cap_add: NET_RAW (or run privileged) and rebuild/recreate the container"
+        fi
       fi
 
       if [ -n "$MTR_OUTPUT" ]; then
