@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import os
 import json
+from collections import deque
 from pathlib import Path
 import time
 from http.server import HTTPServer, BaseHTTPRequestHandler
@@ -107,26 +108,34 @@ def _summaries_from_state(daily: dict):
     return result
 
 
+def _parse_log_line(line: str):
+    line = line.strip()
+    if not line:
+        return None
+    try:
+        return json.loads(line)
+    except json.JSONDecodeError:
+        return None
+
+
 def read_recent_records():
     """Last MAX_RECORDS records for charts & raw table."""
     if not os.path.exists(LOG_FILE):
         return []
+
+    lines = deque(maxlen=MAX_RECORDS)
     try:
         with open(LOG_FILE, "r") as f:
-            lines = f.readlines()
+            for line in f:
+                lines.append(line)
     except Exception:
         return []
 
     records = []
-    for line in lines[-MAX_RECORDS:]:
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            rec = json.loads(line)
+    for line in lines:
+        rec = _parse_log_line(line)
+        if rec is not None:
             records.append(rec)
-        except json.JSONDecodeError:
-            continue
     return records
 
 
@@ -138,12 +147,8 @@ def read_records_for_day(day_str: str):
     records = []
     with open(LOG_FILE, "r") as f:
         for line in f:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                rec = json.loads(line)
-            except json.JSONDecodeError:
+            rec = _parse_log_line(line)
+            if rec is None:
                 continue
             ts = rec.get("timestamp") or ""
             if not ts.startswith(day_str):
@@ -189,12 +194,8 @@ def build_daily_summary_from_file():
             f.seek(start_pos)
 
         for line in f:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                rec = json.loads(line)
-            except json.JSONDecodeError:
+            rec = _parse_log_line(line)
+            if rec is None:
                 continue
 
             ts = rec.get("timestamp")
