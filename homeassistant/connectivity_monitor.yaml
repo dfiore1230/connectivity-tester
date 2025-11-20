@@ -2,11 +2,18 @@
 # Connectivity Monitor Package
 # - REST sensors reading from HTTPS + Basic Auth
 # - Binary sensor for internet up/down
-# - Works with your reverse proxy at https://connectivity.fior.es
+# - Template values for your own hostname + credentials
 ###############################################################################
 
+# Update the hostname to point at your deployed dashboard.
+# Use Home Assistant secrets.yaml to avoid storing credentials in plain text.
+# Example secrets entries:
+#   connectivity_host: https://connectivity.example.com
+#   connectivity_username: your_username
+#   connectivity_password: your_password
+
 rest:
-  - resource: "https://connectivity.fior.es/data"
+  - resource: "!secret connectivity_host"  # e.g. https://connectivity.example.com/data
     scan_interval: 30
     timeout: 5
 
@@ -15,8 +22,8 @@ rest:
 
     # Basic Authentication
     authentication: basic
-    username: "dfiore"
-    password: "Veedubs1@"   # <-- replace with your password
+    username: "!secret connectivity_username"
+    password: "!secret connectivity_password"
 
     sensor:
       - name: "Connectivity Last Loss"
@@ -68,4 +75,3 @@ binary_sensor:
           {% else %}
             mdi:alert-circle
           {% endif %}
-
