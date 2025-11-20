@@ -17,6 +17,7 @@ echo "Starting connectivity tester"
 echo "Default interval: ${INTERVAL_DEFAULT} seconds"
 echo "Log file: ${LOG_FILE}"
 echo "Initial env TARGETS: ${TARGETS_ENV:-<none>} (TARGET_HOST=${TARGET_HOST})"
+echo "Startup MTR parameters: ENABLE_MTR=${MTR_ENABLED_RAW_DEFAULT}, CYCLES=${MTR_CYCLES_DEFAULT}, MAX_HOPS=${MTR_MAX_HOPS_DEFAULT}, TIMEOUT_SECONDS=${MTR_TIMEOUT_DEFAULT}"
 
 is_truthy() {
   local value
