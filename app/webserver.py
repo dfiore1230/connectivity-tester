@@ -491,34 +491,60 @@ class Handler(BaseHTTPRequestHandler):
     #status.degraded {{ color: #fbbf24; }}
     #status.small {{ color: var(--text-muted); font-weight: 400; }}
 
-    .layout-top {{
+    .nav {{
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      margin-top: 4px;
+      margin-bottom: 4px;
+    }}
+
+    .nav button {{
+      font-size: 12px;
+      padding: 6px 10px;
+      border-radius: 6px;
+      border: 1px solid var(--border-color);
+      background: transparent;
+      color: var(--text-main);
+      cursor: pointer;
+    }}
+
+    .nav button.active {{
+      background: rgba(99,102,241,0.1);
+      border-color: rgba(99,102,241,0.4);
+      color: #4338ca;
+    }}
+
+    .page {{
+      display: none;
+    }}
+
+    .page.active {{
+      display: block;
+    }}
+
+    .layout-main {{
       display: grid;
       gap: var(--gap);
     }}
 
     @media (min-width: 900px) {{
-      .layout-top {{
-        grid-template-columns: 2fr 1fr;
+      .layout-main {{
+        grid-template-columns: 320px 1fr;
         align-items: start;
       }}
     }}
 
-    .charts {{
-      display: grid;
-      grid-template-columns: 1fr;
-      gap: var(--gap);
-    }}
-
-    .side-panel {{
+    .snapshot-column {{
       display: flex;
       flex-direction: column;
       gap: var(--gap);
     }}
 
-    @media (min-width: 700px) {{
-      .charts {{
-        grid-template-columns: 1fr 1fr;
-      }}
+    .charts-column {{
+      display: flex;
+      flex-direction: column;
+      gap: var(--gap);
     }}
 
     .card {{
@@ -789,12 +815,47 @@ class Handler(BaseHTTPRequestHandler):
       <div id="status" class="small">Loading...</div>
     </header>
 
-    <div class="layout-top">
-      <div>
-        <div class="toolbar">
-          <button id="resetZoom" type="button">Reset Zoom</button>
+    <div class="nav">
+      <button class="active" data-target="dashboard-page">Dashboard</button>
+      <button data-target="settings-page">Settings</button>
+    </div>
+
+    <div id="dashboard-page" class="page active">
+      <div class="layout-main">
+        <div class="snapshot-column">
+          <div class="card info-card">
+            <h2>Current Snapshot</h2>
+            <div class="subtitle">Based on the latest probe (last target logged)</div>
+            <div class="info-grid">
+              <div class="info-label">Target</div>
+              <div class="info-value" id="info-target">-</div>
+
+              <div class="info-label">Dst Host/IP</div>
+              <div class="info-value" id="info-dst">-</div>
+
+              <div class="info-label">Src IP</div>
+              <div class="info-value" id="info-src">-</div>
+
+              <div class="info-label">Public IP</div>
+              <div class="info-value" id="info-public">-</div>
+
+              <div class="info-label">Last RTT (ms)</div>
+              <div class="info-value" id="info-rtt">-</div>
+
+              <div class="info-label">Last Loss (%)</div>
+              <div class="info-value" id="info-loss">-</div>
+
+              <div class="info-label">Samples</div>
+              <div class="info-value" id="info-samples">-</div>
+            </div>
+          </div>
         </div>
-        <div class="charts">
+
+        <div class="charts-column">
+          <div class="toolbar" style="justify-content:flex-end;">
+            <button id="resetZoom" type="button">Reset Zoom</button>
+          </div>
+
           <div class="card chart-card">
             <h2>Average RTT</h2>
             <div class="subtitle">Per probe, in milliseconds (multi-series if multiple targets)</div>
@@ -810,153 +871,128 @@ class Handler(BaseHTTPRequestHandler):
               <canvas id="uptimeChart"></canvas>
             </div>
           </div>
+
+          <div class="card mtr-card">
+            <div class="mtr-header">
+              <div>
+                <h2>Hop Trace (mtr)</h2>
+                <div class="subtitle">Last hop loss + latency plotted per probe.</div>
+              </div>
+              <span id="mtr-state" class="badge">-</span>
+            </div>
+            <div class="chart-container small">
+              <canvas id="mtrChart"></canvas>
+            </div>
+            <div class="mtr-status" id="mtr-status">Waiting for mtr data...</div>
+          </div>
         </div>
       </div>
 
-      <div class="side-panel">
-        <div class="card info-card">
-          <h2>Current Snapshot</h2>
-          <div class="subtitle">Based on the latest probe (last target logged)</div>
-          <div class="info-grid">
-            <div class="info-label">Target</div>
-            <div class="info-value" id="info-target">-</div>
-
-            <div class="info-label">Dst Host/IP</div>
-            <div class="info-value" id="info-dst">-</div>
-
-            <div class="info-label">Src IP</div>
-            <div class="info-value" id="info-src">-</div>
-
-            <div class="info-label">Public IP</div>
-            <div class="info-value" id="info-public">-</div>
-
-            <div class="info-label">Last RTT (ms)</div>
-            <div class="info-value" id="info-rtt">-</div>
-
-            <div class="info-label">Last Loss (%)</div>
-            <div class="info-value" id="info-loss">-</div>
-
-            <div class="info-label">Samples</div>
-            <div class="info-value" id="info-samples">-</div>
-          </div>
-
-          <div class="settings">
-            <h3 style="margin:0 0 6px 0;font-size:13px;">Settings</h3>
-            <div class="settings-row">
-              <label for="cfg-targets">Targets (comma-separated, e.g. <code>GoogleDNS=8.8.8.8,Cloudflare=1.1.1.1</code>)</label>
-              <input id="cfg-targets" type="text" value="{cfg['targets_display']}">
-            </div>
-            <div class="settings-row">
-              <label for="cfg-interval">Probe interval (seconds)</label>
-              <input id="cfg-interval" type="number" min="1" value="{cfg['interval']}">
-            </div>
-            <div class="settings-row">
-              <label>
-                <input id="cfg-enable-mtr" type="checkbox" {mtr_checked}>
-                Enable hop tracing (mtr)
-              </label>
-              <div class="small-text">Requires mtr installed + NET_RAW capability in the container.</div>
-            </div>
-            <div class="settings-row" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;">
-              <div>
-                <label for="cfg-mtr-cycles">MTR cycles</label>
-                <input id="cfg-mtr-cycles" type="number" min="1" value="{cfg['mtr_cycles']}">
-              </div>
-              <div>
-                <label for="cfg-mtr-max-hops">Max hops</label>
-                <input id="cfg-mtr-max-hops" type="number" min="1" value="{cfg['mtr_max_hops']}">
-              </div>
-              <div>
-                <label for="cfg-mtr-timeout">Timeout (s)</label>
-                <input id="cfg-mtr-timeout" type="number" min="1" value="{cfg['mtr_timeout']}">
-              </div>
-            </div>
-            <div class="settings-actions">
-              <button type="button" id="save-config">Save</button>
-            </div>
-            <div class="small-text" id="settings-status">Changes apply on the next probe cycle.</div>
-          </div>
+      <div class="card table-card">
+        <h2>Raw Probe Log</h2>
+        <div class="subtitle">Most recent {MAX_RECORDS} entries (sorted; click headers to change sort).</div>
+        <div class="table-wrapper">
+          <table id="log-table">
+            <thead>
+              <tr>
+                <th data-col="0">Timestamp</th>
+                <th data-col="1">Target</th>
+                <th data-col="2">Src IP</th>
+                <th data-col="3">Public IP</th>
+                <th data-col="4">Dst Host</th>
+                <th data-col="5">Dst IP</th>
+                <th data-col="6">Sent</th>
+                <th data-col="7">Recv</th>
+                <th data-col="8">Loss %</th>
+                <th data-col="9">RTT Avg (ms)</th>
+                <th data-col="10">MTR Last Hop</th>
+                <th data-col="11">MTR Loss %</th>
+                <th data-col="12">MTR Avg (ms)</th>
+                <th data-col="13">MTR Hops</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
         </div>
+        <div class="small-text">
+          Exportable via the connectivity.log file on disk for sending to your ISP.
+        </div>
+      </div>
 
-        <div class="card mtr-card">
-          <div class="mtr-header">
+      <div class="card table-card">
+        <h2>Daily Summary</h2>
+        <div class="subtitle">
+          One row per day across the entire log (indefinite history as long as the log is retained).
+          Click a date to open full details for that day in a new tab.
+        </div>
+        <div class="settings-actions" style="margin-top:4px;margin-bottom:4px;">
+          <button type="button" id="rebuild-daily">Rebuild summaries</button>
+          <button type="button" id="export-daily">Export CSV</button>
+        </div>
+        <div class="small-text" id="daily-status"></div>
+        <div class="table-wrapper" style="max-height:35vh;">
+          <table id="daily-table">
+            <thead>
+              <tr>
+                <th data-dcol="0">Date</th>
+                <th data-dcol="1">Total probes</th>
+                <th data-dcol="2">Uptime %</th>
+                <th data-dcol="3">Avg loss %</th>
+                <th data-dcol="4">Avg RTT (ms)</th>
+                <th data-dcol="5">Min RTT (ms)</th>
+                <th data-dcol="6">Max RTT (ms)</th>
+                <th data-dcol="7">Good</th>
+                <th data-dcol="8">Degraded</th>
+                <th data-dcol="9">Down</th>
+                <th data-dcol="10">Targets</th>
+                <th data-dcol="11">Public IPs</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div id="settings-page" class="page">
+      <div class="card">
+        <h2>Settings</h2>
+        <div class="subtitle">Configure targets, timing, and hop tracing options.</div>
+        <div class="settings">
+          <div class="settings-row">
+            <label for="cfg-targets">Targets (comma-separated, e.g. <code>GoogleDNS=8.8.8.8,Cloudflare=1.1.1.1</code>)</label>
+            <input id="cfg-targets" type="text" value="{cfg['targets_display']}">
+          </div>
+          <div class="settings-row">
+            <label for="cfg-interval">Probe interval (seconds)</label>
+            <input id="cfg-interval" type="number" min="1" value="{cfg['interval']}">
+          </div>
+          <div class="settings-row">
+            <label>
+              <input id="cfg-enable-mtr" type="checkbox" {mtr_checked}>
+              Enable hop tracing (mtr)
+            </label>
+            <div class="small-text">Requires mtr installed + NET_RAW capability in the container.</div>
+          </div>
+          <div class="settings-row" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;">
             <div>
-              <h2>Hop Trace (mtr)</h2>
-              <div class="subtitle">Last hop loss + latency plotted per probe.</div>
+              <label for="cfg-mtr-cycles">MTR cycles</label>
+              <input id="cfg-mtr-cycles" type="number" min="1" value="{cfg['mtr_cycles']}">
             </div>
-            <span id="mtr-state" class="badge">-</span>
+            <div>
+              <label for="cfg-mtr-max-hops">Max hops</label>
+              <input id="cfg-mtr-max-hops" type="number" min="1" value="{cfg['mtr_max_hops']}">
+            </div>
+            <div>
+              <label for="cfg-mtr-timeout">Timeout (s)</label>
+              <input id="cfg-mtr-timeout" type="number" min="1" value="{cfg['mtr_timeout']}">
+            </div>
           </div>
-          <div class="chart-container small">
-            <canvas id="mtrChart"></canvas>
+          <div class="settings-actions">
+            <button type="button" id="save-config">Save</button>
           </div>
-          <div class="mtr-status" id="mtr-status">Waiting for mtr data...</div>
+          <div class="small-text" id="settings-status">Changes apply on the next probe cycle.</div>
         </div>
-      </div>
-    </div>
-
-    <div class="card table-card">
-      <h2>Raw Probe Log</h2>
-      <div class="subtitle">Most recent {MAX_RECORDS} entries (sorted; click headers to change sort).</div>
-      <div class="table-wrapper">
-        <table id="log-table">
-          <thead>
-            <tr>
-              <th data-col="0">Timestamp</th>
-              <th data-col="1">Target</th>
-              <th data-col="2">Src IP</th>
-              <th data-col="3">Public IP</th>
-              <th data-col="4">Dst Host</th>
-              <th data-col="5">Dst IP</th>
-              <th data-col="6">Sent</th>
-              <th data-col="7">Recv</th>
-              <th data-col="8">Loss %</th>
-              <th data-col="9">RTT Avg (ms)</th>
-              <th data-col="10">MTR Last Hop</th>
-              <th data-col="11">MTR Loss %</th>
-              <th data-col="12">MTR Avg (ms)</th>
-              <th data-col="13">MTR Hops</th>
-            </tr>
-          </thead>
-          <tbody></tbody>
-        </table>
-      </div>
-      <div class="small-text">
-        Exportable via the connectivity.log file on disk for sending to your ISP.
-      </div>
-    </div>
-
-    <div class="card table-card">
-      <h2>Daily Summary</h2>
-      <div class="subtitle">
-        One row per day across the entire log (indefinite history as long as the log is retained).
-        Click a date to open full details for that day in a new tab.
-      </div>
-      <div class="settings-actions" style="margin-top:4px;margin-bottom:4px;">
-        <button type="button" id="rebuild-daily">Rebuild summaries</button>
-        <button type="button" id="export-daily">Export CSV</button>
-      </div>
-      <div class="small-text" id="daily-status"></div>
-      <div class="table-wrapper" style="max-height:35vh;">
-        <table id="daily-table">
-          <thead>
-            <tr>
-              <th data-dcol="0">Date</th>
-              <th data-dcol="1">Probes</th>
-              <th data-dcol="2">Uptime %</th>
-              <th data-dcol="3">Avg Loss %</th>
-              <th data-dcol="4">Avg RTT (ms)</th>
-              <th data-dcol="5">Min RTT</th>
-              <th data-dcol="6">Max RTT</th>
-              <th data-dcol="7">Down Probes</th>
-              <th data-dcol="8">Targets</th>
-              <th data-dcol="9">Public IPs</th>
-            </tr>
-          </thead>
-          <tbody></tbody>
-        </table>
-      </div>
-      <div class="small-text">
-        Use this as a point-in-time record for each day (e.g., when showing your provider long-term behavior).
       </div>
     </div>
   </div>
@@ -971,7 +1007,7 @@ class Handler(BaseHTTPRequestHandler):
     const numericCols = new Set([6,7,8,9,11,12,13]);     // raw table numeric
 
     const dailySortState = {{ index: 0, dir: 'desc' }};  // daily summary (default newest date first)
-    const dailyNumericCols = new Set([1,2,3,4,5,6,7]);   // daily numeric cols
+    const dailyNumericCols = new Set([1,2,3,4,5,6,7,8,9]);   // daily numeric cols
     const helpers = window.ConnectivityHelpers;
     const mtrEnabledDefault = {"true" if _is_truthy(cfg.get("enable_mtr", "0")) else "false"};
 
@@ -1233,6 +1269,8 @@ class Handler(BaseHTTPRequestHandler):
         r.avg_rtt_ms,
         r.min_rtt_ms,
         r.max_rtt_ms,
+        r.good_probes,
+        r.degraded_probes,
         r.down_probes,
         (r.targets || []).join(', '),
         (r.public_ips || []).join(', ')
@@ -1427,7 +1465,7 @@ class Handler(BaseHTTPRequestHandler):
       if (!rows || rows.length === 0) {{
         const tr = document.createElement('tr');
         const td = document.createElement('td');
-        td.colSpan = 10;
+        td.colSpan = 12;
         td.textContent = 'No daily data yet.';
         tr.appendChild(td);
         tbody.appendChild(tr);
@@ -1460,6 +1498,8 @@ class Handler(BaseHTTPRequestHandler):
           fmt(d.avg_rtt_ms, 2),
           fmt(d.min_rtt_ms, 2),
           fmt(d.max_rtt_ms, 2),
+          d.good_probes,
+          d.degraded_probes,
           d.down_probes,
           (d.targets || []).join(', '),
           (d.public_ips || []).join(', ')
@@ -1676,6 +1716,19 @@ class Handler(BaseHTTPRequestHandler):
           dailySortState.dir = 'asc';
         }}
         renderDailyTable(dailySummary);
+      }});
+    }});
+
+    // Navigation between dashboard + settings
+    const pages = document.querySelectorAll('.page');
+    document.querySelectorAll('.nav button').forEach(btn => {{
+      btn.addEventListener('click', () => {{
+        const target = btn.getAttribute('data-target');
+        document.querySelectorAll('.nav button').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        pages.forEach(page => {{
+          page.classList.toggle('active', page.id === target);
+        }});
       }});
     }});
 
