@@ -759,85 +759,14 @@ class Handler(BaseHTTPRequestHandler):
       gap: 8px;
     }}
 
-    .mtr-grid {{
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-      margin-top: 8px;
+    .chart-container.small {{
+      height: 220px;
     }}
 
-    .mtr-hop {{
-      display: grid;
-      grid-template-columns: 32px 1fr;
-      gap: 10px;
-      align-items: center;
-      padding: 6px 8px;
-      border: 1px solid var(--border-color);
-      border-radius: 6px;
-      background: rgba(148,163,184,0.08);
-    }}
-
-    .mtr-hop-idx {{
-      font-weight: 700;
+    .mtr-status {{
+      margin-top: 6px;
       color: var(--text-muted);
-      text-align: center;
-    }}
-
-    .mtr-hop-body {{
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-    }}
-
-    .mtr-hop-head {{
-      display: flex;
-      justify-content: space-between;
-      gap: 8px;
-      align-items: baseline;
-      font-weight: 600;
-    }}
-
-    .mtr-hop-metrics {{
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px 10px;
       font-size: 12px;
-      color: var(--text-muted);
-    }}
-
-    .pill {{
-      padding: 2px 6px;
-      border-radius: 999px;
-      font-size: 11px;
-      border: 1px solid var(--border-color);
-    }}
-
-    .pill.good {{ background: #d1fae5; color: #065f46; border-color: #34d399; }}
-    .pill.warn {{ background: #fef3c7; color: #92400e; border-color: #fbbf24; }}
-    .pill.bad {{ background: #fee2e2; color: #991b1b; border-color: #fca5a5; }}
-
-    @media (prefers-color-scheme: dark) {{
-      .mtr-hop {{
-        background: rgba(255,255,255,0.04);
-      }}
-      .pill.good {{ background: rgba(16,185,129,0.2); color: #34d399; border-color: rgba(52,211,153,0.4); }}
-      .pill.warn {{ background: rgba(251,191,36,0.2); color: #fbbf24; border-color: rgba(251,191,36,0.4); }}
-      .pill.bad {{ background: rgba(239,68,68,0.2); color: #fca5a5; border-color: rgba(239,68,68,0.4); }}
-    }}
-
-    .meter {{
-      position: relative;
-      width: 100%;
-      height: 8px;
-      background: rgba(148,163,184,0.4);
-      border-radius: 999px;
-      overflow: hidden;
-    }}
-
-    .meter-fill {{
-      height: 100%;
-      background: linear-gradient(90deg, #60a5fa, #6366f1);
-      border-radius: 999px;
     }}
   </style>
   <script src="/static/js/helpers.js"></script>
@@ -953,12 +882,14 @@ class Handler(BaseHTTPRequestHandler):
           <div class="mtr-header">
             <div>
               <h2>Hop Trace (mtr)</h2>
-              <div class="subtitle">Most recent hop-by-hop run from the probe log.</div>
+              <div class="subtitle">Last hop loss + latency plotted per probe.</div>
             </div>
             <span id="mtr-state" class="badge">-</span>
           </div>
-          <div class="small-text" id="mtr-empty">Waiting for mtr data...</div>
-          <div class="mtr-grid" id="mtr-grid"></div>
+          <div class="chart-container small">
+            <canvas id="mtrChart"></canvas>
+          </div>
+          <div class="mtr-status" id="mtr-status">Waiting for mtr data...</div>
         </div>
       </div>
     </div>
@@ -980,6 +911,10 @@ class Handler(BaseHTTPRequestHandler):
               <th data-col="7">Recv</th>
               <th data-col="8">Loss %</th>
               <th data-col="9">RTT Avg (ms)</th>
+              <th data-col="10">MTR Last Hop</th>
+              <th data-col="11">MTR Loss %</th>
+              <th data-col="12">MTR Avg (ms)</th>
+              <th data-col="13">MTR Hops</th>
             </tr>
           </thead>
           <tbody></tbody>
@@ -1029,10 +964,11 @@ class Handler(BaseHTTPRequestHandler):
   <script>
     let rttChart = null;
     let uptimeChart = null;
+    let mtrChart = null;
     let lastRows = [];
     let dailySummary = [];
     const sortState = {{ index: 0, dir: 'asc' }};        // raw table
-    const numericCols = new Set([6,7,8,9]);              // raw table numeric
+    const numericCols = new Set([6,7,8,9,11,12,13]);     // raw table numeric
 
     const dailySortState = {{ index: 0, dir: 'desc' }};  // daily summary (default newest date first)
     const dailyNumericCols = new Set([1,2,3,4,5,6,7]);   // daily numeric cols
@@ -1048,7 +984,7 @@ class Handler(BaseHTTPRequestHandler):
         renderTable(lastRows);
         renderCharts(lastRows);
         updateInfoPanel(lastRows);
-        renderMtrCard(lastRows);
+        renderMtrChart(lastRows);
         const lu = document.getElementById('last-update');
         if (lu) lu.textContent = new Date().toLocaleTimeString();
       }} catch (e) {{
@@ -1097,116 +1033,165 @@ class Handler(BaseHTTPRequestHandler):
       return mtrEnabledDefault;
     }}
 
-    function renderMtrCard(rows) {{
-      const grid = document.getElementById('mtr-grid');
-      const empty = document.getElementById('mtr-empty');
+    function renderMtrChart(rows) {{
+      const canvas = document.getElementById('mtrChart');
+      const status = document.getElementById('mtr-status');
       const badge = document.getElementById('mtr-state');
-      if (!grid || !empty || !badge) return;
-
-      grid.innerHTML = '';
-      empty.textContent = '';
+      if (!canvas || !status || !badge) return;
 
       const enabled = isMtrEnabled();
 
-      if (!rows || rows.length === 0) {{
-        badge.textContent = enabled ? 'Waiting for data' : 'Disabled';
-        badge.className = enabled ? 'badge warn' : 'badge off';
-        empty.textContent = enabled
-          ? 'No probes logged yet. First probe will include the hop trace.'
-          : 'Enable hop tracing to collect path data.';
-        return;
-      }}
-
-      const norm = helpers.normalizeRows([...rows]);
-      const latestTrace = [...norm]
-        .reverse()
-        .find((r) => Array.isArray(r.mtr_report) && r.mtr_report.length > 0);
-
-      if (!latestTrace) {{
-        badge.textContent = enabled ? 'No mtr samples yet' : 'Disabled';
-        badge.className = enabled ? 'badge warn' : 'badge off';
-        empty.textContent = enabled
-          ? 'Waiting for the next successful mtr run (requires mtr binary + NET_RAW).'
-          : 'Enable hop tracing to see per-hop latency and loss.';
-        return;
-      }}
-
-      const hops = latestTrace.mtr_report || [];
-      const worstValues = hops
-        .map((h) => Number(h.worst_ms))
-        .filter((n) => !Number.isNaN(n) && n > 0);
-      const avgValues = hops
-        .map((h) => Number(h.avg_ms))
-        .filter((n) => !Number.isNaN(n) && n > 0);
-      const meterBase = Math.max(worstValues.length ? Math.max(...worstValues) : 1, avgValues.length ? Math.max(...avgValues) : 1);
-
-      const tsLabel = latestTrace.timestamp
-        ? 'Last run ' + latestTrace.timestamp
-        : 'Latest hop trace';
-      badge.textContent = tsLabel;
-      badge.className = 'badge success';
-      empty.textContent = '';
-
-      hops.forEach((hop) => {{
-        const hopRow = document.createElement('div');
-        hopRow.className = 'mtr-hop';
-
-        const idx = document.createElement('div');
-        idx.className = 'mtr-hop-idx';
-        idx.textContent = hop.hop || '-';
-
-        const body = document.createElement('div');
-        body.className = 'mtr-hop-body';
-
-        const head = document.createElement('div');
-        head.className = 'mtr-hop-head';
-
-        const host = document.createElement('div');
-        host.textContent = hop.host || '(unknown)';
-
-        const lossVal = Number(hop.loss_pct);
-        let lossClass = 'good';
-        if (!Number.isNaN(lossVal) && lossVal > 0) {{
-          lossClass = lossVal >= 50 ? 'bad' : 'warn';
+      if (!enabled) {{
+        badge.textContent = 'Disabled';
+        badge.className = 'badge off';
+        status.textContent = 'Enable hop tracing to capture hop loss + latency.';
+        if (mtrChart) {{
+          mtrChart.data.labels = [];
+          mtrChart.data.datasets = [];
+          mtrChart.update();
         }}
-        const lossPill = document.createElement('span');
-        lossPill.className = 'pill ' + lossClass;
-        lossPill.textContent = Number.isNaN(lossVal)
-          ? 'Loss n/a'
-          : 'Loss ' + lossVal + '%';
+        return;
+      }}
 
-        head.appendChild(host);
-        head.appendChild(lossPill);
+      if (!rows || rows.length === 0) {{
+        badge.textContent = 'Waiting for data';
+        badge.className = 'badge warn';
+        status.textContent = 'No probes logged yet. First probe will include hop traces.';
+        if (mtrChart) {{
+          mtrChart.data.labels = [];
+          mtrChart.data.datasets = [];
+          mtrChart.update();
+        }}
+        return;
+      }}
 
-        const meter = document.createElement('div');
-        meter.className = 'meter';
-        const fill = document.createElement('div');
-        fill.className = 'meter-fill';
-        const rawAvg = Number(hop.avg_ms);
-        const rawWorst = Number(hop.worst_ms);
-        const numerator = !Number.isNaN(rawAvg) && rawAvg > 0 ? rawAvg : rawWorst;
-        const width = Math.min(100, ((numerator || meterBase) / meterBase) * 100);
-        fill.style.width = width + '%';
-        meter.appendChild(fill);
+      const chartData = buildMtrChartData(rows);
+      const hasData = [chartData.avgData, chartData.lossData, chartData.hopsData].some((arr) =>
+        Array.isArray(arr) && arr.some((v) => v !== null)
+      );
 
-        const meta = document.createElement('div');
-        meta.className = 'mtr-hop-metrics';
-        meta.innerHTML = [
-          'Avg ' + (hop.avg_ms ?? 'n/a') + ' ms',
-          'Last ' + (hop.last_ms ?? 'n/a') + ' ms',
-          'Best ' + (hop.best_ms ?? 'n/a') + ' ms',
-          'Worst ' + (hop.worst_ms ?? 'n/a') + ' ms',
-          'Sent ' + (hop.sent ?? 'n/a'),
-        ].join(' · ');
+      if (!hasData) {{
+        badge.textContent = 'Waiting for mtr data';
+        badge.className = 'badge warn';
+        status.textContent = 'No hop traces yet (requires mtr binary + NET_RAW capability).';
+        if (mtrChart) {{
+          mtrChart.data.labels = [];
+          mtrChart.data.datasets = [];
+          mtrChart.update();
+        }}
+        return;
+      }}
 
-        body.appendChild(head);
-        body.appendChild(meter);
-        body.appendChild(meta);
+      const datasets = [
+        {{
+          type: 'line',
+          label: 'Last hop avg (ms)',
+          data: chartData.avgData,
+          spanGaps: true,
+          borderColor: '#6366f1',
+          backgroundColor: '#818cf8',
+          fill: false,
+          tension: 0.2,
+          yAxisID: 'latency',
+        }},
+        {{
+          type: 'bar',
+          label: 'Last hop loss %',
+          data: chartData.lossData,
+          borderColor: 'rgba(239,68,68,0.9)',
+          backgroundColor: 'rgba(239,68,68,0.5)',
+          yAxisID: 'loss',
+          order: 0,
+        }},
+        {{
+          type: 'line',
+          label: 'Hops seen',
+          data: chartData.hopsData,
+          spanGaps: true,
+          borderColor: '#10b981',
+          backgroundColor: '#34d399',
+          fill: false,
+          tension: 0.2,
+          stepped: true,
+          yAxisID: 'loss',
+          order: 1,
+        }},
+      ];
 
-        hopRow.appendChild(idx);
-        hopRow.appendChild(body);
-        grid.appendChild(hopRow);
-      }});
+      const options = {{
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: false,
+        scales: {{
+          x: {{
+            title: {{ display: true, text: 'Time' }},
+            ticks: {{
+              autoSkip: true,
+              maxTicksLimit: 6,
+              callback: (val) => chartData.labels[val] || '',
+            }},
+          }},
+          latency: {{
+            position: 'left',
+            title: {{ display: true, text: 'Latency (ms)' }},
+            beginAtZero: true,
+            ticks: {{ maxTicksLimit: 5 }},
+          }},
+          loss: {{
+            position: 'right',
+            title: {{ display: true, text: 'Loss (%) / Hops' }},
+            beginAtZero: true,
+            suggestedMax: 100,
+            grid: {{ drawOnChartArea: false }},
+            ticks: {{ maxTicksLimit: 5 }},
+          }},
+        }},
+        plugins: {{
+          legend: {{ display: true, position: 'bottom' }},
+          tooltip: {{
+            callbacks: {{
+              title: (items) => {{
+                const idx = items[0].dataIndex;
+                const chart = items[0].chart;
+                const full = chart._fullLabels && chart._fullLabels[idx];
+                return full || items[0].label;
+              }},
+            }},
+          }},
+        }},
+      }};
+
+      if (!mtrChart) {{
+        mtrChart = new Chart(canvas.getContext('2d'), {{
+          type: 'bar',
+          data: {{ labels: chartData.labels, datasets }},
+          options,
+        }});
+      }} else {{
+        mtrChart.data.labels = chartData.labels;
+        mtrChart.data.datasets = datasets;
+        mtrChart.options = options;
+        mtrChart.update();
+      }}
+
+      mtrChart._fullLabels = chartData.fullLabels;
+
+      badge.textContent = chartData.latest?.timestamp
+        ? 'Last mtr ' + chartData.latest.timestamp
+        : 'Latest hop traces';
+      badge.className = 'badge success';
+
+      const parts = [];
+      const last = chartData.latest || {{}};
+      if (last.mtr_last_hop) parts.push('Hop ' + last.mtr_last_hop);
+      const lastLoss = Number(last.mtr_last_loss_pct);
+      if (!Number.isNaN(lastLoss)) parts.push('Loss ' + lastLoss + '%');
+      const lastAvg = Number(last.mtr_last_avg_ms);
+      if (!Number.isNaN(lastAvg)) parts.push('Avg ' + lastAvg + ' ms');
+      const hops = Number(last.mtr_hops);
+      if (!Number.isNaN(hops)) parts.push(hops + ' hops seen');
+
+      status.textContent = parts.length ? parts.join(' · ') : 'Latest hop trace captured.';
     }}
 
     function normalizeRows(rows) {{
@@ -1230,7 +1215,11 @@ class Handler(BaseHTTPRequestHandler):
         r.sent,
         r.received,
         r.loss_pct,
-        r.rtt_avg_ms
+        r.rtt_avg_ms,
+        r.mtr_last_hop,
+        r.mtr_last_loss_pct,
+        r.mtr_last_avg_ms,
+        r.mtr_hops,
       ];
       return helpers.sortData(rows, sortState, mapper, numericCols);
     }}
@@ -1322,6 +1311,46 @@ class Handler(BaseHTTPRequestHandler):
       return {{ labels, fullLabels, datasetsRtt, datasetsUp }};
     }}
 
+    function buildMtrChartData(rows) {{
+      const norm = helpers.normalizeRows([...rows]);
+      if (norm.length === 0) {{
+        return {{ labels: [], fullLabels: [], avgData: [], lossData: [], hopsData: [], latest: null }};
+      }}
+
+      const fullLabels = norm.map((r) => r.timestamp || '');
+      const labels = fullLabels.map((ts) => {{
+        const t = (ts || '').split('T')[1] || ts;
+        return t.substring(0, 5);
+      }});
+
+      const avgData = new Array(norm.length).fill(null);
+      const lossData = new Array(norm.length).fill(null);
+      const hopsData = new Array(norm.length).fill(null);
+
+      let latest = null;
+
+      norm.forEach((r, idx) => {{
+        const avg = Number(r.mtr_last_avg_ms);
+        const loss = Number(r.mtr_last_loss_pct);
+        const hops = Number(r.mtr_hops);
+
+        if (!Number.isNaN(avg)) {{
+          avgData[idx] = avg;
+          latest = r;
+        }}
+        if (!Number.isNaN(loss)) {{
+          lossData[idx] = loss;
+          latest = r;
+        }}
+        if (!Number.isNaN(hops)) {{
+          hopsData[idx] = hops;
+          latest = r;
+        }}
+      }});
+
+      return {{ labels, fullLabels, avgData, lossData, hopsData, latest }};
+    }}
+
     function renderTable(rows) {{
       const tbody = document.querySelector('#log-table tbody');
       tbody.innerHTML = '';
@@ -1329,7 +1358,7 @@ class Handler(BaseHTTPRequestHandler):
       if (!rows || rows.length === 0) {{
         const tr = document.createElement('tr');
         const td = document.createElement('td');
-        td.colSpan = 10;
+        td.colSpan = 14;
         td.textContent = 'No data yet.';
         tr.appendChild(td);
         tbody.appendChild(tr);
@@ -1374,7 +1403,11 @@ class Handler(BaseHTTPRequestHandler):
           r.sent != null ? r.sent : '',
           r.received != null ? r.received : '',
           r.loss_pct != null ? r.loss_pct : '',
-          r.rtt_avg_ms != null ? r.rtt_avg_ms : ''
+          r.rtt_avg_ms != null ? r.rtt_avg_ms : '',
+          r.mtr_last_hop || '',
+          r.mtr_last_loss_pct != null ? r.mtr_last_loss_pct : '',
+          r.mtr_last_avg_ms != null ? r.mtr_last_avg_ms : '',
+          r.mtr_hops != null ? r.mtr_hops : '',
         ];
 
         cells.forEach(val => {{
@@ -1702,7 +1735,7 @@ class Handler(BaseHTTPRequestHandler):
         rows_html = ""
 
         if not records:
-            rows_html = "<tr><td colspan='10'>No records found for this date.</td></tr>"
+            rows_html = "<tr><td colspan='14'>No records found for this date.</td></tr>"
         else:
             for r in records:
                 ts = r.get("timestamp", "")
@@ -1715,6 +1748,10 @@ class Handler(BaseHTTPRequestHandler):
                 recv = r.get("received", "")
                 loss = r.get("loss_pct", "")
                 rtt = r.get("rtt_avg_ms", "")
+                last_hop = r.get("mtr_last_hop") or ""
+                last_loss = r.get("mtr_last_loss_pct", "")
+                last_avg = r.get("mtr_last_avg_ms", "")
+                hop_count = r.get("mtr_hops", "")
                 rows_html += f"""
 <tr>
   <td>{ts}</td>
@@ -1727,6 +1764,10 @@ class Handler(BaseHTTPRequestHandler):
   <td>{recv}</td>
   <td>{loss}</td>
   <td>{rtt}</td>
+  <td>{last_hop}</td>
+  <td>{last_loss}</td>
+  <td>{last_avg}</td>
+  <td>{hop_count}</td>
 </tr>
 """
 
@@ -1842,6 +1883,10 @@ class Handler(BaseHTTPRequestHandler):
               <th data-col="7">Recv</th>
               <th data-col="8">Loss %</th>
               <th data-col="9">RTT Avg (ms)</th>
+              <th data-col="10">MTR Last Hop</th>
+              <th data-col="11">MTR Loss %</th>
+              <th data-col="12">MTR Avg (ms)</th>
+              <th data-col="13">MTR Hops</th>
             </tr>
           </thead>
           <tbody>
@@ -1861,7 +1906,7 @@ class Handler(BaseHTTPRequestHandler):
       const table = document.getElementById('day-table');
       const tbody = table.querySelector('tbody');
       const headerCells = table.querySelectorAll('thead th');
-      const numericCols = new Set([6,7,8,9]);  // Sent, Recv, Loss, RTT
+      const numericCols = new Set([6,7,8,9,11,12,13]);  // Sent, Recv, Loss, RTT, MTR metrics
       const sortState = {{ index: 0, dir: 'asc' }};
 
       function getRowsArray() {{
