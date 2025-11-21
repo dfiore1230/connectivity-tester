@@ -103,6 +103,13 @@ evaluate_mtr_state() {
     MTR_TIMEOUT="$MTR_TIMEOUT_DEFAULT"
   fi
 
+  # Ensure the timeout can cover the worst-case run (1 second per hop per cycle)
+  MTR_MIN_TIMEOUT=$((MTR_CYCLES * MTR_MAX_HOPS))
+  if [ "$MTR_TIMEOUT" -lt "$MTR_MIN_TIMEOUT" ]; then
+    echo "INFO: raising MTR timeout to ${MTR_MIN_TIMEOUT}s to cover ${MTR_CYCLES} cycles x ${MTR_MAX_HOPS} hops"
+    MTR_TIMEOUT="$MTR_MIN_TIMEOUT"
+  fi
+
   if command -v mtr >/dev/null 2>&1; then
     if [ "$MTR_AVAILABLE" != "1" ]; then
       echo "mtr support enabled (cycles=${MTR_CYCLES}, max_hops=${MTR_MAX_HOPS}, timeout=${MTR_TIMEOUT}s)"
