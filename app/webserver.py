@@ -633,13 +633,14 @@ class Handler(BaseHTTPRequestHandler):
       display: flex;
       flex-direction: column;
       height: 33vh;
-      min-height: 200px;
-      max-height: 300px;
+      min-height: 240px;
+      max-height: none;
     }}
 
     .chart-container {{
       flex: 1 1 auto;
       position: relative;
+      min-height: 220px;
     }}
 
     .chart-container canvas {{
@@ -786,7 +787,7 @@ class Handler(BaseHTTPRequestHandler):
     }}
 
     .chart-container.small {{
-      height: 220px;
+      min-height: 180px;
     }}
 
     .mtr-status {{
