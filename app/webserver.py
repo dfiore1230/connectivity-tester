@@ -640,7 +640,7 @@ class Handler(BaseHTTPRequestHandler):
     .chart-container {{
       flex: 1 1 auto;
       position: relative;
-      min-height: 220px;
+      min-height: 180px;
     }}
 
     .chart-container canvas {{
