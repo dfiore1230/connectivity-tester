@@ -135,6 +135,28 @@ connectivity_username: your_username
 connectivity_password: your_password
 ```
 
+### Embedding the dashboard in Home Assistant
+
+Home Assistant iframes cannot forward credentials, so Basic Auth will block the view unless you include the username/password in the URL. Add a secret that contains the full authenticated URL to your deployment:
+
+```
+# secrets.yaml
+connectivity_dashboard_url_auth: https://your_username:your_password@connectivity.example.com
+```
+
+Then extend the provided package with a `panel_iframe` so the full dashboard appears in the sidebar:
+
+```yaml
+panel_iframe:
+  connectivity_monitor:
+    title: Connectivity Dashboard
+    icon: mdi:chart-line
+    url: "!secret connectivity_dashboard_url_auth"
+    require_admin: false
+```
+
+The iframe will use the embedded credentials to bypass the Basic Auth challenge while keeping them outside of your checked-in configuration.
+
 ---
 
 ## 📁 Logs

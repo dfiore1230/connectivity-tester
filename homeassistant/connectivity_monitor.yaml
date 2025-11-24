@@ -75,3 +75,15 @@ binary_sensor:
           {% else %}
             mdi:alert-circle
           {% endif %}
+
+###############################################################################
+# Optional: Embed the dashboard as a sidebar iframe using Basic Auth.
+# Store the full authenticated URL in secrets.yaml to avoid committing credentials:
+#   connectivity_dashboard_url_auth: https://user:pass@connectivity.example.com
+###############################################################################
+panel_iframe:
+  connectivity_monitor:
+    title: Connectivity Dashboard
+    icon: mdi:chart-line
+    url: "!secret connectivity_dashboard_url_auth"
+    require_admin: false
