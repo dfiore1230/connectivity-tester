@@ -85,5 +85,5 @@ panel_iframe:
   connectivity_monitor:
     title: Connectivity Dashboard
     icon: mdi:chart-line
-    url: "!secret connectivity_dashboard_url_auth"
+    url: !secret connectivity_dashboard_url_auth
     require_admin: false
